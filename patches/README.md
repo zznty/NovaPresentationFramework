@@ -100,7 +100,7 @@ git -C third_party/dotnet-wpf apply $P/0015-linux-imaging.patch
 git -C third_party/dotnet-wpf apply $P/0016-desktop-theme-ivt.patch
 git -C third_party/dotnet-wpf apply $P/0017-linux-multitarget-net10.patch
 
-# 4. Verify the series composes (must print MATCH=61 DIFFER=0, exit 0).
+# 4. Verify the series composes (must print MATCH=86 DIFFER=0, exit 0).
 ./patches/verify-series.sh
 
 # 5. Build in dependency order. SdlSource pulls every Nova.* + Core +
@@ -322,6 +322,17 @@ workstream, 2026-08-20).
   projects (PresentationCore / PresentationFramework / WindowsBase).
 - **Do not vendor WpfGfx.** No native code, no wpfgfx build, no DXVK/Skia.
 - The submodule is never added as a solution folder of native projects.
+- `0052-wpf-nuget-config-feeds.patch` — submodule `NuGet.config` gains the
+  Nova host feeds (nuget.org / zznty / SilkGitlab) with packageSourceMapping
+  entries (Silk.NET.* → SilkGitlab, SixLabors.ImageSharp → zznty, `*` →
+  nuget.org), alongside 0003's dotnet-* wildcard mappings. Required for
+  COLD-cache restore of the patched PresentationCore graph (it references
+  Nova projects whose packages live on the parent feeds); warm
+  `~/.nuget/packages` masks the failure (NU1100 for Silk/ImageSharp).
+  Generated against the intermediate state after 0051; the live tree's
+  pre-existing unregistered mapping block is exactly 0003's content, so no
+  duplication — verify-series MATCH covers the file through 0003+0052.
+
 - `0051-pts-paravisual-offset.patch` — paragraph visuals at their arranged rects
   (2026-08-28). The visual chain positions only LINE visuals (paragraph-relative
   vrStart offsets); nothing ever placed the paragraph visual itself, so every

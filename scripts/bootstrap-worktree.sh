@@ -80,6 +80,7 @@ SERIES=(
     0049-linux-clipboard-image-filedrop
     0050-linux-managed-dragloop
     0051-pts-paravisual-offset
+    0052-wpf-nuget-config-feeds
 
 
 

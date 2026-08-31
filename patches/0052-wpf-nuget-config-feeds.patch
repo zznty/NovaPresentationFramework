@@ -1,0 +1,39 @@
+diff --git a/NuGet.config b/NuGet.config
+index 3f51066..1f4cdd7 100644
+--- a/NuGet.config
++++ b/NuGet.config
+@@ -17,14 +17,31 @@
+     <add key="dotnet10-transport" value="https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet10-transport/nuget/v3/index.json" />
+     <add key="dotnet11" value="https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet11/nuget/v3/index.json" />
+     <add key="dotnet11-transport" value="https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet11-transport/nuget/v3/index.json" />
++    <!-- Nova host feeds: the patched PresentationCore graph references Nova
++         projects whose packages live on the parent repo's feeds. -->
++    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
++    <add key="zznty" value="https://ng.zznty.ru/v3/index.json" />
++    <add key="SilkGitlab" value="https://gitlab.com/api/v4/projects/51457475/packages/nuget/index.json" />
+   </packageSources>
+   <disabledPackageSources />
+   <!--
+-    Parent repo NuGet.config enables packageSourceMapping. Unmapped
+-    sources from this file are then ignored (NU1100). Mirror the
+-    unmapped WPF feed set so dnceng packages resolve.
++    The parent repo NuGet.config enables packageSourceMapping, which applies
++    to this submodule's restore graphs. Mapping lives here (nearest config
++    wins) so every source is reachable: the dotnet-* feeds carry the dnceng
++    packages, SilkGitlab the Silk.NET.* prereleases, zznty the ImageSharp
++    -compat build, nuget.org everything else. Specific patterns beat the
++    wildcards for Silk and ImageSharp.
+   -->
+   <packageSourceMapping>
++    <packageSource key="SilkGitlab">
++      <package pattern="Silk.NET.*" />
++    </packageSource>
++    <packageSource key="zznty">
++      <package pattern="SixLabors.ImageSharp" />
++    </packageSource>
++    <packageSource key="nuget.org">
++      <package pattern="*" />
++    </packageSource>
+     <packageSource key="dotnet-eng">
+       <package pattern="*" />
+     </packageSource>
