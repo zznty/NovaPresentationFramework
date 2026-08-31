@@ -60,9 +60,17 @@ jobs:
           # mesa-vulkan-drivers provides lvp_icd.*.json (llvmpipe), libvulkan1
           # provides libvulkan.so.1. Text/graphics libs are listed explicitly
           # so the workflow never depends on an image's transitive deps.
+          # The -dev packages are REQUIRED, not optional: the runtime
+          # P/Invokes load UNVERSIONED names (fontconfig, freetype, harfbuzz,
+          # vulkan, hunspell-1.7) and Ubuntu ships the unversioned .so
+          # symlinks only in -dev packages (Arch ships them in the main
+          # packages — the workstation masks this).
           sudo apt-get install -y --no-install-recommends \
-            libvulkan1 mesa-vulkan-drivers \
-            libfreetype6 libfontconfig1 libharfbuzz0b fonts-dejavu-core \
+            libvulkan1 libvulkan-dev mesa-vulkan-drivers \
+            libfreetype6 libfreetype-dev \
+            libfontconfig1 libfontconfig-dev \
+            libharfbuzz0b libharfbuzz-dev \
+            libhunspell-dev fonts-dejavu-core \
             libicu-dev
           # Pin the ICD explicitly (same contract as the workstation). Ubuntu
           # names the file lvp_icd.x86_64.json; Arch names it lvp_icd.json —
