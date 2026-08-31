@@ -1,0 +1,44 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Window.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Window.cs
+index 5dda246..4d51acd 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Window.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Window.cs
+@@ -293,7 +293,8 @@ public Nullable<bool> ShowDialog()
+             _dialogOwnerHandle = _ownerHandle;
+ 
+             // verify owner handle is window
+-            if (!UnsafeNativeMethods.IsWindow( new HandleRef( null, _dialogOwnerHandle ) ))
++            // SDL handles are not Win32 HWNDs; user32.dll does not exist on Linux.
++            if (OperatingSystem.IsWindows() && !UnsafeNativeMethods.IsWindow( new HandleRef( null, _dialogOwnerHandle ) ))
+             {
+                 _dialogOwnerHandle = IntPtr.Zero;
+             }
+@@ -318,6 +319,12 @@ public Nullable<bool> ShowDialog()
+                 _dialogOwnerHandle = IntPtr.Zero;
+             }
+ 
++            // Win32-only: modal-dialog owner tracking and disabling the thread's other windows.
++            // SDL windows are not HWNDs and user32.dll does not exist on Linux, so the owner
++            // stays as-is and the disabled-window bookkeeping never runs (_threadWindowHandles
++            // stays null, which the catch path below already tolerates).
++            if (OperatingSystem.IsWindows())
++            {
+             // if dialog owner is not null, get the top level window (case where dialog owner is a
+             // child window), and save it's state regarding enabled and active window
+             if (_dialogOwnerHandle != IntPtr.Zero)
+@@ -385,6 +392,7 @@ public Nullable<bool> ShowDialog()
+                     SafeNativeMethods.ReleaseCapture();
+                 // }
+             }
++            }
+ 
+             // Ensure Dialog RoutedCommand is registered with CommandManager
+             EnsureDialogCommand();
+@@ -430,7 +438,7 @@ public Nullable<bool> ShowDialog()
+                 // Activate the previously active window.
+                 // This code/logic came from User.
+                 if ( (_dialogPreviousActiveHandle != IntPtr.Zero) &&
+-                    (UnsafeNativeMethods.IsWindow(new HandleRef(null, _dialogPreviousActiveHandle))))
++                    (!OperatingSystem.IsWindows() || UnsafeNativeMethods.IsWindow(new HandleRef(null, _dialogPreviousActiveHandle))))
+                 {
+                     // SetFocus fails if the input hwnd is not a Window or if the Window is not on the
+                     // calling thread.

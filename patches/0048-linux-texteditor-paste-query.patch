@@ -1,0 +1,134 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Documents/TextEditorCopyPaste.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Documents/TextEditorCopyPaste.cs
+index 0a8928a..64a6529 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Documents/TextEditorCopyPaste.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Documents/TextEditorCopyPaste.cs
+@@ -1,4 +1,4 @@
+-﻿// Licensed to the .NET Foundation under one or more agreements.
++// Licensed to the .NET Foundation under one or more agreements.
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+ using MS.Internal;
+@@ -226,6 +226,13 @@
+         {
+             string formatToApply;
+ 
++            if (dataObject is null)
++            {
++                // Linux host trap (patches/0048): Clipboard.GetDataObject returns null
++                // on the SDL runtime (patch 0034); no format applies to a null object.
++                return string.Empty;
++            }
++
+             // GetDataPresent(DataFormats.Xaml)have a chance to register Xaml format
+             // by calling the unmanaged code which is RegisterClipboardFormat.
+ 
+@@ -275,6 +282,35 @@
+ 
+             if (This.Selection != null && !This.Selection.IsEmpty)
+             {
++                if (!OperatingSystem.IsWindows())
++                {
++                    // Linux host trap (patches/0048): the Windows body JIT-resolves the
++                    // OLE DataObject (System.Private.Windows.Core — no Linux host). The
++                    // SDL text clipboard is the copy/cut medium.
++                    Clipboard.SetText(This.Selection.Text, TextDataFormat.UnicodeText);
++
++                    using (This.Selection.DeclareChangeBlock())
++                    {
++                        TextEditorSelection._ClearSuggestedX(This);
++                        This.Selection.Text = string.Empty;
++
++                        if (This.Selection is TextSelection textSelection)
++                        {
++                            textSelection.ClearSpringloadFormatting();
++                        }
++                    }
++
++                    return;
++                }
++
++                CutCore(This);
++            }
++        }
++
++        private static void CutCore(TextEditor This)
++        {
++            if (This.Selection != null && !This.Selection.IsEmpty)
++            {
+                 // Copy content onto the clipboard
+ 
+                 // Note: _CreateDataObject raises a public event which might throw a recoverable exception.
+@@ -323,6 +359,23 @@
+ 
+             if (This.Selection != null && !This.Selection.IsEmpty)
+             {
++                if (!OperatingSystem.IsWindows())
++                {
++                    // Linux host trap (patches/0048): the Windows body JIT-resolves the
++                    // OLE DataObject (System.Private.Windows.Core — no Linux host). The
++                    // SDL text clipboard is the copy/cut medium.
++                    Clipboard.SetText(This.Selection.Text, TextDataFormat.UnicodeText);
++                    return;
++                }
++
++                CopyCore(This);
++            }
++        }
++
++        private static void CopyCore(TextEditor This)
++        {
++            if (This.Selection != null && !This.Selection.IsEmpty)
++            {
+                 // Note: _CreateDataObject raises a public event which might throw a recoverable exception.
+                 DataObject dataObject = TextEditorCopyPaste._CreateDataObject(This, /*isDragDrop:*/false);
+ 
+@@ -366,6 +419,32 @@
+ 
+             TextEditorTyping._BreakTypingSequence(This);
+ 
++            if (!OperatingSystem.IsWindows())
++            {
++                // Linux host trap (patches/0048): the Windows body JIT-resolves the
++                // OLE DataObject (System.Private.Windows.Core — no Linux host). The SDL
++                // text clipboard is the paste medium: replace the selection with the
++                // clipboard text.
++                string text = Clipboard.GetText();
++                if (text.Length > 0 && This.Selection is TextSelection selection)
++                {
++                    using (selection.DeclareChangeBlock())
++                    {
++                        TextEditorSelection._ClearSuggestedX(This);
++                        selection.Text = text;
++                        selection.ClearSpringloadFormatting();
++                    }
++                }
++
++                return;
++            }
++
++            PasteCore(This);
++        }
++
++        private static void PasteCore(TextEditor This)
++        {
++
+             // Get DataObject from the Clipboard
+             IDataObject dataObject;
+             try
+@@ -578,6 +657,16 @@
+ 
+             args.Handled = true;
+ 
++            if (!OperatingSystem.IsWindows())
++            {
++                // Linux host trap (patches/0048): Clipboard.GetDataObject returns null
++                // (patch 0034 — the OLE DataObject has no Linux host), so the format
++                // probe below would NRE on every command requery. Paste availability
++                // follows the SDL text clipboard (Clipboard.GetText is SDL-backed).
++                args.CanExecute = Clipboard.GetText().Length > 0;
++                return;
++            }
++
+             try
+             {
+                 // Define what format our paste mechanism recognizes on the clipbord appropriate for this selection

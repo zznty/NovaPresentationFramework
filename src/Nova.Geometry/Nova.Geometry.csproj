@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Shared geometry and resource handle types.</Description>
+    <RootNamespace>Nova.Geometry</RootNamespace>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Safe SDL3 window and input APIs.</Description>
+    <RootNamespace>Nova.Sdl</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Nova.Geometry\Nova.Geometry.csproj" />
+    <ProjectReference Include="..\Nova.Vulkan\Nova.Vulkan.csproj" />
+    <ProjectReference Include="..\Nova.SystemTheme\Nova.SystemTheme.csproj" />
+    <ProjectReference Include="..\Nova.DesktopTheme\Nova.DesktopTheme.csproj" />
+    <PackageReference Include="Silk.NET.SDL" />
+    <PackageReference Include="Silk.NET.SDL.Native" />
+  </ItemGroup>
+</Project>

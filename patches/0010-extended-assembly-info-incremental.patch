@@ -1,0 +1,12 @@
+diff --git a/eng/WpfArcadeSdk/tools/ExtendedAssemblyInfo.targets b/eng/WpfArcadeSdk/tools/ExtendedAssemblyInfo.targets
+index d5488497..b3f7a2fb 100644
+--- a/eng/WpfArcadeSdk/tools/ExtendedAssemblyInfo.targets
++++ b/eng/WpfArcadeSdk/tools/ExtendedAssemblyInfo.targets
+@@ -336,7 +336,6 @@ using System.Runtime.Versioning;
+       </ExtendedAssemblyInfoFileContent>
+     </ItemGroup>
+ 
+-    <Delete Condition="Exists('$(GeneratedExtendedAssemblyInfoFile)')" Files="$(GeneratedExtendedAssemblyInfoFile)" />
+     <WriteLinesToFile Lines="@(ExtendedAssemblyInfoFileContent->'%(Text)')"
+                       File="$(GeneratedExtendedAssemblyInfoFile)"
+                       Overwrite="true" WriteOnlyWhenDifferent="true" />

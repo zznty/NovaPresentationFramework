@@ -1,0 +1,138 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/Factory.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/Factory.cs
+index 268270e..4c1b284 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/Factory.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/Factory.cs
+@@ -2,6 +2,7 @@
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+ using System.IO;
++using System.Net;
+ using Nova.FontConfig;
+ using Nova.FreeType;
+ 
+@@ -93,9 +94,50 @@ private FontCollection GetSystemFontCollection(bool checkForUpdates)
+         internal FontCollection GetFontCollection(Uri uri)
+         {
+             ArgumentNullException.ThrowIfNull(uri);
+-            if (IsLocalUri(uri) && Directory.Exists(uri.LocalPath))
++            if (IsLocalUri(uri))
+             {
+-                return FontCollection.CreateFromDirectory(this, uri.LocalPath);
++                if (Directory.Exists(uri.LocalPath))
++                {
++                    return FontCollection.CreateFromDirectory(this, uri.LocalPath);
++                }
++
++                if (File.Exists(uri.LocalPath))
++                {
++                    try
++                    {
++                        return FontCollection.CreateFromFile(this, uri.LocalPath);
++                    }
++                    catch (FreeTypeException)
++                    {
++                        return GetSystemFontCollection();
++                    }
++                }
++            }
++            else
++            {
++                // A stream-backed source (pack://application or any resource URI): resolve the
++                // resource and open the font face in memory — the Windows equivalent of
++                // handing DWrite the FontSource stream. A failed resolution falls back to the
++                // system collection.
++                Stream? stream = null;
++                try
++                {
++                    WebResponse response = MS.Internal.WpfWebRequestHelper.CreateRequestAndGetResponse(uri);
++                    stream = response.GetResponseStream();
++                    if (stream is not null)
++                    {
++                        using var buffer = new MemoryStream();
++                        stream.CopyTo(buffer);
++                        return FontCollection.CreateFromMemory(this, buffer.GetBuffer().AsSpan(0, checked((int)buffer.Length)), uri.ToString());
++                    }
++                }
++                catch (Exception ex) when (!ex.IsCriticalException())
++                {
++                }
++                finally
++                {
++                    stream?.Dispose();
++                }
+             }
+ 
+             return GetSystemFontCollection();
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/NovaFontTypes.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/NovaFontTypes.cs
+index 58b851b..f862ff3 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/NovaFontTypes.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/NovaFontTypes.cs
+@@ -659,20 +659,7 @@ internal static FontCollection CreateFromDirectory(Factory factory, string direc
+                 try
+                 {
+                     Nova.FreeType.FontFace native = factory.FreeType.OpenFace(path, 0);
+-                    var match = new FontMatch(native.FamilyName, path, 0, 80, 0, 100);
+-                    FontFamily family = collection.FindFamilyName(native.FamilyName, out uint index)
+-                        ? collection[index]
+-                        : null;
+-                    if (family == null)
+-                    {
+-                        family = new FontFamily(native.FamilyName, FontFace.ToFontMetrics(native.Metrics))
+-                        {
+-                            FontsCollection = collection
+-                        };
+-                        collection.AddFamily(family);
+-                    }
+-
+-                    family.Add(new Font(factory, family, match, native));
++                    AddFace(collection, factory, native, path);
+                 }
+                 catch (FreeTypeException)
+                 {
+@@ -682,6 +669,46 @@ internal static FontCollection CreateFromDirectory(Factory factory, string direc
+             return collection;
+         }
+ 
++        internal static FontCollection CreateFromFile(Factory factory, string path)
++        {
++            var collection = new FontCollection(factory);
++            Nova.FreeType.FontFace native = factory.FreeType.OpenFace(path, 0);
++            AddFace(collection, factory, native, path);
++            return collection;
++        }
++
++        /// <summary>
++        /// A single font loaded from the resource bytes of a FontFamily source URI
++        /// (pack://application or any stream-backed source) — the Windows equivalent of
++        /// handing DWrite the FontSource stream. The face holds its own pinned copy, so
++        /// the caller's buffer can be released immediately.
++        /// </summary>
++        internal static FontCollection CreateFromMemory(Factory factory, ReadOnlySpan<byte> fontData, string sourceUri)
++        {
++            var collection = new FontCollection(factory);
++            Nova.FreeType.FontFace native = factory.FreeType.OpenFace(fontData, 0);
++            AddFace(collection, factory, native, sourceUri);
++            return collection;
++        }
++
++        private static void AddFace(FontCollection collection, Factory factory, Nova.FreeType.FontFace native, string path)
++        {
++            var match = new FontMatch(native.FamilyName, path, 0, 80, 0, 100);
++            FontFamily family = collection.FindFamilyName(native.FamilyName, out uint index)
++                ? collection[index]
++                : null;
++            if (family == null)
++            {
++                family = new FontFamily(native.FamilyName, FontFace.ToFontMetrics(native.Metrics))
++                {
++                    FontsCollection = collection
++                };
++                collection.AddFamily(family);
++            }
++
++            family.Add(new Font(factory, family, match, native));
++        }
++
+         private void AddFamily(FontFamily family)
+         {
+             uint index = (uint)_families.Count;

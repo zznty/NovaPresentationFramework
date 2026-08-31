@@ -1,0 +1,45 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Nova.Classification/Nova.Classification.csproj" />
+    <Project Path="src/Nova.DesktopTheme/Nova.DesktopTheme.csproj" />
+    <Project Path="src/Nova.DesktopTheme.Host/Nova.DesktopTheme.Host.csproj" />
+    <Project Path="src/Nova.FontConfig/Nova.FontConfig.csproj" />
+    <Project Path="src/Nova.FreeType/Nova.FreeType.csproj" />
+    <Project Path="src/Nova.Geometry/Nova.Geometry.csproj" />
+    <Project Path="src/Nova.Geometry2D/Nova.Geometry2D.csproj" />
+    <Project Path="src/Nova.HarfBuzz/Nova.HarfBuzz.csproj" />
+    <Project Path="src/Nova.Host/Nova.Host.csproj" />
+    <Project Path="src/Nova.Imaging/Nova.Imaging.csproj" />
+    <Project Path="src/Nova.LineServices/Nova.LineServices.csproj" />
+    <Project Path="src/Nova.Mil/Nova.Mil.csproj" />
+    <Project Path="src/Nova.MilCmd/Nova.MilCmd.csproj" />
+    <Project Path="src/Nova.Pts/Nova.Pts.csproj" />
+    <Project Path="src/Nova.Sdl/Nova.Sdl.csproj" />
+    <Project Path="src/Nova.SdlSource/Nova.SdlSource.csproj" />
+    <Project Path="src/Nova.SystemTheme/Nova.SystemTheme.csproj" />
+    <Project Path="src/Nova.Text/Nova.Text.csproj" />
+    <Project Path="src/Nova.Vulkan/Nova.Vulkan.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Nova.Classification.Tests/Nova.Classification.Tests.csproj" />
+    <Project Path="tests/Nova.DesktopTheme.Tests/Nova.DesktopTheme.Tests.csproj" />
+    <Project Path="tests/Nova.DesktopTheme.Host.Tests/Nova.DesktopTheme.Host.Tests.csproj" />
+    <Project Path="tests/Nova.FontConfig.Tests/Nova.FontConfig.Tests.csproj" />
+    <Project Path="tests/Nova.FreeType.Tests/Nova.FreeType.Tests.csproj" />
+    <Project Path="tests/Nova.Geometry.Tests/Nova.Geometry.Tests.csproj" />
+    <Project Path="tests/Nova.Imaging.Tests/Nova.Imaging.Tests.csproj" />
+    <Project Path="tests/Nova.Hunspell.Tests/Nova.Hunspell.Tests.csproj" />
+    <Project Path="src/Nova.Hunspell/Nova.Hunspell.csproj" />
+    <Project Path="tests/Nova.Geometry2D.Tests/Nova.Geometry2D.Tests.csproj" />
+    <Project Path="tests/Nova.HarfBuzz.Tests/Nova.HarfBuzz.Tests.csproj" />
+    <Project Path="tests/Nova.Host.Tests/Nova.Host.Tests.csproj" />
+    <Project Path="tests/Nova.LineServices.Tests/Nova.LineServices.Tests.csproj" />
+    <Project Path="tests/Nova.Mil.Tests/Nova.Mil.Tests.csproj" />
+    <Project Path="tests/Nova.MilCmd.Tests/Nova.MilCmd.Tests.csproj" />
+    <Project Path="tests/Nova.Pts.Tests/Nova.Pts.Tests.csproj" />
+    <Project Path="tests/Nova.Sdl.Tests/Nova.Sdl.Tests.csproj" />
+    <Project Path="tests/Nova.SystemTheme.Tests/Nova.SystemTheme.Tests.csproj" />
+    <Project Path="tests/Nova.Text.Tests/Nova.Text.Tests.csproj" />
+    <Project Path="tests/Nova.Vulkan.Tests/Nova.Vulkan.Tests.csproj" />
+  </Folder>
+</Solution>

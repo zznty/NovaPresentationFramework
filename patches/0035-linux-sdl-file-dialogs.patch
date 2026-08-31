@@ -1,0 +1,237 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/Microsoft/Win32/CommonDialog.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/Microsoft/Win32/CommonDialog.cs
+index f6426d7..e649a0f 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/Microsoft/Win32/CommonDialog.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/Microsoft/Win32/CommonDialog.cs
+@@ -59,6 +59,11 @@ public abstract class CommonDialog
+                 throw new InvalidOperationException(SR.CantShowModalOnNonInteractive);
+             }
+ 
++            if (!OperatingSystem.IsWindows())
++            {
++                return ShowDialogLinux();
++            }
++
+             // Call GetActiveWindow to retrieve the window handle to the active window
+             // attached to the calling thread's message queue.  We'll set the owner of
+             // the common dialog to this handle.
+@@ -108,6 +113,25 @@ public abstract class CommonDialog
+             }
+         }
+ 
++        /// <summary>
++        ///  Runs the dialog on the SDL runtime. The Win32 common dialogs (the IFileDialog
++        ///  COM objects and the hidden HwndWrapper owner) have no Linux host; the concrete
++        ///  dialogs route through the SDL3 dialog API (the XDG Desktop Portal) instead.
++        ///  Dialogs without a Linux host yet return <see langword="null"/> (canceled).
++        /// </summary>
++        private bool? ShowDialogLinux()
++        {
++            switch (this)
++            {
++                case FileDialog fileDialog:
++                    return fileDialog.ShowDialogLinux();
++                case OpenFolderDialog folderDialog:
++                    return folderDialog.ShowDialogLinux();
++                default:
++                    return null;
++            }
++        }
++
+         /// <summary>
+         ///  Runs a common dialog box, with the owner as the given Window
+         /// </summary>
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/Microsoft/Win32/CommonItemDialog.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/Microsoft/Win32/CommonItemDialog.cs
+index 22ade30..47795ae 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/Microsoft/Win32/CommonItemDialog.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/Microsoft/Win32/CommonItemDialog.cs
+@@ -8,6 +8,7 @@
+ using System.Runtime.InteropServices;
+ using System.Text;
+ using System.Windows;
++using System.Windows.Threading;
+ 
+ // There are THREE definitions of HRESULT. Two in ErrorCodes, and one in wgx_render.cs.
+ // wgx_render.cs wins if we don't explicitly define it here.
+@@ -292,6 +293,57 @@ protected override bool RunDialog(IntPtr hwndOwner)
+         //---------------------------------------------------
+         #region Internal Methods
+ 
++        /// <summary>
++        ///  The Linux dialog runner: starts the SDL dialog (the XDG Desktop Portal), pumps a
++        ///  nested dispatcher frame until it completes, then applies the managed state — the
++        ///  item names and the FileOk cancellation hook. Returns the session on success so
++        ///  the concrete dialog can post-process; <see langword="null"/> on error, cancel, or
++        ///  a canceled FileOk.
++        /// </summary>
++        private protected Nova.SdlSource.FileDialogSession? ShowDialogLinuxCore(
++            Nova.SdlSource.FileDialogKind kind,
++            Nova.SdlSource.FileDialogFilter[]? filters,
++            bool allowMany)
++        {
++            Nova.SdlSource.SdlPresentationSource? source = Nova.SdlSource.SdlPresentationSource.FromActiveWindow();
++            if (source is null)
++            {
++                // No window exists to own the dialog (and no event pump to finish it).
++                return null;
++            }
++
++            Nova.SdlSource.FileDialogSession session = source.ShowFileDialog(
++                kind,
++                filters,
++                InitialDirectory,
++                allowMany);
++
++            // The SDL dialog is asynchronous: keep a nested dispatcher frame running until
++            // the callback fires. The callback may run on any thread; marshal the frame's
++            // exit to the UI thread (a same-thread BeginInvoke executes inline).
++            var frame = new DispatcherFrame();
++            session.Completed += (_, _) =>
++                Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Send, (Action)(() => frame.Continue = false));
++            Dispatcher.PushFrame(frame);
++
++            if (session.FileNames is null || session.FileNames.Count == 0)
++            {
++                return null;
++            }
++
++            // The managed FileOk/Cancel hook: an app can refuse the selection.
++            var cancelArgs = new CancelEventArgs();
++            OnItemOk(cancelArgs);
++            if (cancelArgs.Cancel)
++            {
++                return null;
++            }
++
++            MutableItemNames = [.. session.FileNames];
++            return session;
++        }
++
++
+         /// <summary>
+         ///  Returns the state of the given options flag.
+         /// </summary>
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/Microsoft/Win32/FileDialog.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/Microsoft/Win32/FileDialog.cs
+index 1e6eacf..7bbce23 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/Microsoft/Win32/FileDialog.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/Microsoft/Win32/FileDialog.cs
+@@ -68,6 +68,97 @@ private protected FileDialog()
+         ///  implementation of Reset() if they choose to
+         ///  override this function.
+         /// </summary>
++        /// <summary>
++        ///  The Linux runner: maps the Open/Save specifics to the SDL dialog and applies the
++        ///  managed post-processing the Windows dialog performs after the user picks.
++        /// </summary>
++        internal bool? ShowDialogLinux()
++        {
++            bool isSave = this is SaveFileDialog;
++            Nova.SdlSource.FileDialogKind kind = isSave
++                ? Nova.SdlSource.FileDialogKind.Save
++                : Nova.SdlSource.FileDialogKind.Open;
++            bool allowMany = this is OpenFileDialog { Multiselect: true };
++            Nova.SdlSource.FileDialogSession? session = ShowDialogLinuxCore(kind, BuildLinuxFilters(), allowMany);
++            if (session is null)
++            {
++                return false;
++            }
++
++            if (session.FilterIndex > 0)
++            {
++                FilterIndex = session.FilterIndex;
++            }
++
++            if (isSave)
++            {
++                ApplyLinuxSaveExtension();
++            }
++            else if (CheckFileExists && MutableItemNames is { } names)
++            {
++                // The Windows dialog refuses selections that don't exist; the portal may
++                // not. Mirror the managed contract: drop missing files, refuse when none
++                // remain.
++                string[] existing = Array.FindAll(names, File.Exists);
++                if (existing.Length == 0)
++                {
++                    MutableItemNames = null;
++                    return false;
++                }
++
++                MutableItemNames = existing;
++            }
++
++            return true;
++        }
++
++        /// <summary>Maps the WPF Filter string ("Label|*.ext1;*.ext2|...") to SDL filters.</summary>
++        private Nova.SdlSource.FileDialogFilter[]? BuildLinuxFilters()
++        {
++            if (string.IsNullOrEmpty(Filter))
++            {
++                return null;
++            }
++
++            // "Label|pattern|Label|pattern" — an unpaired trailing label is ignored.
++            string[] parts = Filter.Split('|');
++            var filters = new List<Nova.SdlSource.FileDialogFilter>();
++            for (int i = 0; i + 1 < parts.Length; i += 2)
++            {
++                filters.Add(new Nova.SdlSource.FileDialogFilter(parts[i], ToSdlPattern(parts[i + 1])));
++            }
++
++            return filters.Count == 0 ? null : [.. filters];
++        }
++
++        /// <summary>"*.jpg;*.jpeg" -> "jpg;jpeg"; "*" / "*.*" -> "*" (SDL rejects the "*." form).</summary>
++        private static string ToSdlPattern(string pattern)
++        {
++            var extensions = new List<string>();
++            foreach (string part in pattern.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
++            {
++                string extension = part.TrimStart('*', '.');
++                extensions.Add(extension.Length == 0 ? "*" : extension);
++            }
++
++            return string.Join(';', extensions);
++        }
++
++        /// <summary>The Windows save dialog appends DefaultExt when the user typed none.</summary>
++        private void ApplyLinuxSaveExtension()
++        {
++            if (!AddExtension || DefaultExt.Length == 0 || MutableItemNames is not [string name])
++            {
++                return;
++            }
++
++            if (Path.GetExtension(name).Length == 0)
++            {
++                string extension = DefaultExt.StartsWith('.') ? DefaultExt : "." + DefaultExt;
++                MutableItemNames = [name + extension];
++            }
++        }
++
+         public override void Reset()
+         {
+             base.Reset();
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/Microsoft/Win32/OpenFolderDialog.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/Microsoft/Win32/OpenFolderDialog.cs
+index 52afb3a..2a1abd2 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/Microsoft/Win32/OpenFolderDialog.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/Microsoft/Win32/OpenFolderDialog.cs
+@@ -55,6 +55,18 @@ public OpenFolderDialog() : base()
+         /// <summary>
+         ///  Resets all properties to their default values.
+         /// </summary>
++        /// <summary>
++        ///  The Linux runner: the SDL folder dialog (the XDG Desktop Portal).
++        /// </summary>
++        internal bool? ShowDialogLinux()
++        {
++            Nova.SdlSource.FileDialogSession? session = ShowDialogLinuxCore(
++                Nova.SdlSource.FileDialogKind.Folder,
++                null,
++                Multiselect);
++            return session is not null;
++        }
++
+         public override void Reset()
+         {
+             base.Reset();

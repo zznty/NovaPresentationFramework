@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Nova.Text\Nova.Text.csproj" />
+    <ProjectReference Include="..\..\src\Nova.Vulkan\Nova.Vulkan.csproj" />
+    <ProjectReference Include="..\..\src\Nova.Geometry\Nova.Geometry.csproj" />
+  </ItemGroup>
+</Project>

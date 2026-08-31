@@ -1,0 +1,19 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/MS/Internal/PtsHost/PtsHelper.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/MS/Internal/PtsHost/PtsHelper.cs
+index 8386d08..e3da35c 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/MS/Internal/PtsHost/PtsHelper.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/MS/Internal/PtsHost/PtsHelper.cs
+@@ -275,6 +275,14 @@
+                     // New paragraph - insert new visual node
+                     visualCollection.Insert(index, paraClient.Visual);
+ 
++                    // Position the paragraph visual at its arranged rect. The line
++                    // visuals inside carry paragraph-relative vrStart offsets, so the
++                    // paragraph's own track-relative rect is the missing link in the
++                    // visual chain (the track visual itself sits at the page origin).
++                    paraClient.Visual.Offset = new Vector(
++                        TextDpi.FromTextDpi(paraClient.Rect.u),
++                        TextDpi.FromTextDpi(paraClient.Rect.v));
++
+                     paraClient.ValidateVisual(fskupd);
+                 }
+                 else

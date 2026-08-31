@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>SDL window and Vulkan presenter frame loop.</Description>
+    <RootNamespace>Nova.Host</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Nova.Geometry\Nova.Geometry.csproj" />
+    <ProjectReference Include="..\Nova.Mil\Nova.Mil.csproj" />
+    <ProjectReference Include="..\Nova.Sdl\Nova.Sdl.csproj" />
+    <ProjectReference Include="..\Nova.Vulkan\Nova.Vulkan.csproj" />
+  </ItemGroup>
+</Project>

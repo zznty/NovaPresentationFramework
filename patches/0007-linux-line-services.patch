@@ -1,0 +1,1467 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/TextFormatting/LineServices.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/TextFormatting/LineServices.cs
+index a6c8fd4..e04631f 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/TextFormatting/LineServices.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/TextFormatting/LineServices.cs
+@@ -12,6 +12,7 @@
+ using System.Windows.Media.TextFormatting;
+ using System.Runtime.InteropServices;
+ using MS.Internal.Text.TextInterface;
++using NovaLineServices = Nova.LineServices;
+ 
+ namespace MS.Internal.TextFormatting
+ {
+@@ -1404,20 +1405,89 @@ public static LsKTab LsKTabFromTabAlignment(TextTabAlignment tabAlignment)
+ 
+     internal static class UnsafeNativeMethods
+     {
++        internal static LsErr LoCreateContext(
++            ref LsContextInfo               contextInfo,      // const
++            ref LscbkRedefined              lscbkRedef,
++            out IntPtr                      ploc
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LoCreateContextImpl(ref contextInfo, ref lscbkRedef, out ploc);
++            }
++
++            return LoCreateContextLinux(ref contextInfo, ref lscbkRedef, out ploc);
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint="LoCreateContext")]
+-        internal static extern LsErr LoCreateContext(
++        private static extern LsErr LoCreateContextImpl(
+             ref LsContextInfo               contextInfo,      // const
+             ref LscbkRedefined              lscbkRedef,
+             out IntPtr                      ploc
+             );
+ 
++        internal static LsErr LoDestroyContext(
++            IntPtr                  ploc
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LoDestroyContextImpl(ploc);
++            }
++
++            return (LsErr)NovaLineServices.LoExports.LoDestroyContext(ploc);
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint="LoDestroyContext")]
+-        internal static extern LsErr LoDestroyContext(
++        private static extern LsErr LoDestroyContextImpl(
+             IntPtr                  ploc
+             );
+ 
++        internal static LsErr LoCreateLine(
++            IntPtr                  ploc,
++            int                     cp,
++            int                     ccpLim,
++            int                     durColumn,
++            uint                    dwLineFlags,
++            IntPtr                  pInputBreakRec,
++            out LsLInfo             plslinfo,
++            out IntPtr              pploline,
++            out int                 maxDepth,
++            out LsLineWidths        lineWidths
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LoCreateLineImpl(
++                    ploc,
++                    cp,
++                    ccpLim,
++                    durColumn,
++                    dwLineFlags,
++                    pInputBreakRec,
++                    out plslinfo,
++                    out pploline,
++                    out maxDepth,
++                    out lineWidths
++                    );
++            }
++
++            return LoCreateLineLinux(
++                ploc,
++                cp,
++                ccpLim,
++                durColumn,
++                dwLineFlags,
++                pInputBreakRec,
++                out plslinfo,
++                out pploline,
++                out maxDepth,
++                out lineWidths
++                );
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint="LoCreateLine")]
+-        internal static extern LsErr LoCreateLine(
++        private static extern LsErr LoCreateLineImpl(
+             IntPtr                  ploc,
+             int                     cp,
+             int                     ccpLim,
+@@ -1430,77 +1500,247 @@ internal static extern LsErr LoCreateLine(
+             out LsLineWidths        lineWidths
+             );
+ 
++        internal static LsErr LoDisposeLine(
++            IntPtr                  ploline,
++            [MarshalAs(UnmanagedType.Bool)]
++            bool                    finalizing
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LoDisposeLineImpl(ploline, finalizing);
++            }
++
++            return (LsErr)NovaLineServices.LoExports.LoDisposeLine(ploline, finalizing);
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint="LoDisposeLine")]
+-        internal static extern LsErr LoDisposeLine(
++        private static extern LsErr LoDisposeLineImpl(
+             IntPtr                  ploline,
+             [MarshalAs(UnmanagedType.Bool)]
+             bool                    finalizing
+             );
+ 
++        internal static LsErr LoAcquireBreakRecord(
++            IntPtr                  ploline,
++            out IntPtr              pbreakrec
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LoAcquireBreakRecordImpl(ploline, out pbreakrec);
++            }
++
++            return (LsErr)NovaLineServices.LoExports.LoAcquireBreakRecord(ploline, out pbreakrec);
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint="LoAcquireBreakRecord")]
+-        internal static extern LsErr LoAcquireBreakRecord(
++        private static extern LsErr LoAcquireBreakRecordImpl(
+             IntPtr                  ploline,
+             out IntPtr              pbreakrec
+             );
+ 
++        internal static LsErr LoDisposeBreakRecord(
++            IntPtr                  pBreakRec,
++            [MarshalAs(UnmanagedType.Bool)]
++            bool                    finalizing
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LoDisposeBreakRecordImpl(pBreakRec, finalizing);
++            }
++
++            return (LsErr)NovaLineServices.LoExports.LoDisposeBreakRecord(pBreakRec, finalizing);
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint="LoDisposeBreakRecord")]
+-        internal static extern LsErr LoDisposeBreakRecord(
++        private static extern LsErr LoDisposeBreakRecordImpl(
+             IntPtr                  pBreakRec,
+             [MarshalAs(UnmanagedType.Bool)]
+             bool                    finalizing
+             );
+ 
++        internal static LsErr LoCloneBreakRecord(
++            IntPtr                  pBreakRec,
++            out IntPtr              pBreakRecClone
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LoCloneBreakRecordImpl(pBreakRec, out pBreakRecClone);
++            }
++
++            return (LsErr)NovaLineServices.LoExports.LoCloneBreakRecord(pBreakRec, out pBreakRecClone);
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint="LoCloneBreakRecord")]
+-        internal static extern LsErr LoCloneBreakRecord(
++        private static extern LsErr LoCloneBreakRecordImpl(
+             IntPtr                  pBreakRec,
+             out IntPtr              pBreakRecClone
+             );
+ 
++        internal static LsErr LoRelievePenaltyResource(
++            IntPtr                  ploline
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LoRelievePenaltyResourceImpl(ploline);
++            }
++
++            return (LsErr)NovaLineServices.LoExports.LoRelievePenaltyResource(ploline);
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint = "LoRelievePenaltyResource")]
+-        internal static extern LsErr LoRelievePenaltyResource(
++        private static extern LsErr LoRelievePenaltyResourceImpl(
+             IntPtr                  ploline
+             );
+ 
++        internal static LsErr LoSetBreaking(
++            IntPtr                  ploc,
++            int                     strategy
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LoSetBreakingImpl(ploc, strategy);
++            }
++
++            return (LsErr)NovaLineServices.LoExports.LoSetBreaking(ploc, strategy);
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint="LoSetBreaking")]
+-        internal static extern LsErr LoSetBreaking(
++        private static extern LsErr LoSetBreakingImpl(
+             IntPtr                  ploc,
+             int                     strategy
+             );
+ 
++        internal static LsErr LoSetDoc(
++            IntPtr                  ploc,
++            int                     isDisplay,
++            int                     isReferencePresentationEqual,
++            ref LsDevRes            deviceInfo
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LoSetDocImpl(ploc, isDisplay, isReferencePresentationEqual, ref deviceInfo);
++            }
++
++            return LoSetDocLinux(ploc, isDisplay, isReferencePresentationEqual, ref deviceInfo);
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint="LoSetDoc")]
+-        internal static extern LsErr LoSetDoc(
++        private static extern LsErr LoSetDocImpl(
+             IntPtr                  ploc,
+             int                     isDisplay,
+             int                     isReferencePresentationEqual,
+             ref LsDevRes            deviceInfo
+             );
+ 
++        internal static unsafe LsErr LoSetTabs(
++            IntPtr                  ploc,
++            int                     durIncrementalTab,
++            int                     tabCount,
++            LsTbd*                  pTabs
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LoSetTabsImpl(ploc, durIncrementalTab, tabCount, pTabs);
++            }
++
++            return LoSetTabsLinux(ploc, durIncrementalTab, tabCount, pTabs);
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint="LoSetTabs")]
+-        internal static extern unsafe LsErr LoSetTabs(
++        private static extern unsafe LsErr LoSetTabsImpl(
+             IntPtr                  ploc,
+             int                     durIncrementalTab,
+             int                     tabCount,
+             LsTbd*                  pTabs
+             );
+ 
++        internal static LsErr LoDisplayLine(
++            IntPtr                  ploline,
++            ref LSPOINT             pt,
++            uint                    displayMode,
++            ref LSRECT              clipRect
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LoDisplayLineImpl(ploline, ref pt, displayMode, ref clipRect);
++            }
++
++            return LoDisplayLineLinux(ploline, ref pt, displayMode, ref clipRect);
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint="LoDisplayLine")]
+-        internal static extern LsErr LoDisplayLine(
++        private static extern LsErr LoDisplayLineImpl(
+             IntPtr                  ploline,
+             ref LSPOINT             pt,
+             uint                    displayMode,
+             ref LSRECT              clipRect
+             );
+ 
++        internal static LsErr LoEnumLine(
++            IntPtr                  ploline,
++            bool                    reverseOder,
++            bool                    fGeometryneeded,
++            ref LSPOINT             pt
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LoEnumLineImpl(ploline, reverseOder, fGeometryneeded, ref pt);
++            }
++
++            return LoEnumLineLinux(ploline, reverseOder, fGeometryneeded, ref pt);
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint="LoEnumLine")]
+-        internal static extern LsErr LoEnumLine(
++        private static extern LsErr LoEnumLineImpl(
+             IntPtr                  ploline,
+             bool                    reverseOder,
+             bool                    fGeometryneeded,
+             ref LSPOINT             pt
+             );
+ 
++        internal static LsErr LoQueryLineCpPpoint(
++            IntPtr                  ploline,
++            int                     lscpQuery,
++            int                     depthQueryMax,
++            IntPtr                  pSubLineInfo,   // passing raw pinned pointer for out array
++            out int                 actualDepthQuery,
++            out LsTextCell          lsTextCell
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LoQueryLineCpPpointImpl(
++                    ploline,
++                    lscpQuery,
++                    depthQueryMax,
++                    pSubLineInfo,
++                    out actualDepthQuery,
++                    out lsTextCell
++                    );
++            }
++
++            return LoQueryLineCpPpointLinux(
++                ploline,
++                lscpQuery,
++                depthQueryMax,
++                pSubLineInfo,
++                out actualDepthQuery,
++                out lsTextCell
++                );
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint="LoQueryLineCpPpoint")]
+-        internal static extern LsErr LoQueryLineCpPpoint(
++        private static extern LsErr LoQueryLineCpPpointImpl(
+             IntPtr                  ploline,
+             int                     lscpQuery,
+             int                     depthQueryMax,
+@@ -1509,8 +1749,39 @@ internal static extern LsErr LoQueryLineCpPpoint(
+             out LsTextCell          lsTextCell
+             );
+ 
++        internal static LsErr LoQueryLinePointPcp(
++            IntPtr                  ploline,
++            ref LSPOINT             ptQuery,        //  use POINT as POINTUV
++            int                     depthQueryMax,
++            IntPtr                  pSubLineInfo,   // passing raw pinned pointer for out array
++            out int                 actualDepthQuery,
++            out LsTextCell          lsTextCell
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LoQueryLinePointPcpImpl(
++                    ploline,
++                    ref ptQuery,
++                    depthQueryMax,
++                    pSubLineInfo,
++                    out actualDepthQuery,
++                    out lsTextCell
++                    );
++            }
++
++            return LoQueryLinePointPcpLinux(
++                ploline,
++                ref ptQuery,
++                depthQueryMax,
++                pSubLineInfo,
++                out actualDepthQuery,
++                out lsTextCell
++                );
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint="LoQueryLinePointPcp")]
+-        internal static extern LsErr LoQueryLinePointPcp(
++        private static extern LsErr LoQueryLinePointPcpImpl(
+             IntPtr                  ploline,
+             ref LSPOINT             ptQuery,        //  use POINT as POINTUV
+             int                     depthQueryMax,
+@@ -1519,8 +1790,42 @@ internal static extern LsErr LoQueryLinePointPcp(
+             out LsTextCell          lsTextCell
+             );
+ 
++        internal static unsafe LsErr LoCreateBreaks(
++            IntPtr                  ploc,               // Line Services context
++            int                     cpFirst,
++            IntPtr                  previousBreakRecord,
++            IntPtr                  ploparabreak,
++            IntPtr                  ptslinevariantRestriction,
++            ref LsBreaks            lsbreaks,
++            out int                 bestFitIndex            
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LoCreateBreaksImpl(
++                    ploc,
++                    cpFirst,
++                    previousBreakRecord,
++                    ploparabreak,
++                    ptslinevariantRestriction,
++                    ref lsbreaks,
++                    out bestFitIndex
++                    );
++            }
++
++            return LoCreateBreaksLinux(
++                ploc,
++                cpFirst,
++                previousBreakRecord,
++                ploparabreak,
++                ptslinevariantRestriction,
++                ref lsbreaks,
++                out bestFitIndex
++                );
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint="LoCreateBreaks")]
+-        internal static extern LsErr LoCreateBreaks(
++        private static extern unsafe LsErr LoCreateBreaksImpl(
+             IntPtr                  ploc,               // Line Services context
+             int                     cpFirst,
+             IntPtr                  previousBreakRecord,
+@@ -1530,8 +1835,40 @@ internal static extern LsErr LoCreateBreaks(
+             out int                 bestFitIndex            
+             );
+ 
++        internal static LsErr LoCreateParaBreakingSession(
++            IntPtr                  ploc,               // Line Services context
++            int                     cpParagraphFirst,
++            int                     maxWidth,
++            IntPtr                  previousParaBreakRecord,
++            ref IntPtr              pploparabreak,
++            [MarshalAs(UnmanagedType.Bool)]
++            ref bool                fParagraphJustified
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LoCreateParaBreakingSessionImpl(
++                    ploc,
++                    cpParagraphFirst,
++                    maxWidth,
++                    previousParaBreakRecord,
++                    ref pploparabreak,
++                    ref fParagraphJustified
++                    );
++            }
++
++            return (LsErr)NovaLineServices.LoExports.LoCreateParaBreakingSession(
++                ploc,
++                cpParagraphFirst,
++                maxWidth,
++                previousParaBreakRecord,
++                ref pploparabreak,
++                ref fParagraphJustified
++                );
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint="LoCreateParaBreakingSession")]
+-        internal static extern LsErr LoCreateParaBreakingSession(
++        private static extern LsErr LoCreateParaBreakingSessionImpl(
+             IntPtr                  ploc,               // Line Services context
+             int                     cpParagraphFirst,
+             int                     maxWidth,
+@@ -1541,15 +1878,43 @@ internal static extern LsErr LoCreateParaBreakingSession(
+             ref bool                fParagraphJustified
+             );
+ 
++        internal static LsErr LoDisposeParaBreakingSession(
++            IntPtr                  ploparabreak,
++            [MarshalAs(UnmanagedType.Bool)]
++            bool                    finalizing
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LoDisposeParaBreakingSessionImpl(ploparabreak, finalizing);
++            }
++
++            return (LsErr)NovaLineServices.LoExports.LoDisposeParaBreakingSession(ploparabreak, finalizing);
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint="LoDisposeParaBreakingSession")]
+-        internal static extern LsErr LoDisposeParaBreakingSession(
++        private static extern LsErr LoDisposeParaBreakingSessionImpl(
+             IntPtr                  ploparabreak,
+             [MarshalAs(UnmanagedType.Bool)]
+             bool                    finalizing
+             );
+ 
++        internal static unsafe LsErr LocbkGetObjectHandlerInfo(
++            IntPtr                  ploc,               // Line Services context
++            uint                    objectId,           // installed object id
++            void*                   objectInfo          // object handler info
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LocbkGetObjectHandlerInfoImpl(ploc, objectId, objectInfo);
++            }
++
++            return (LsErr)NovaLineServices.LoExports.LocbkGetObjectHandlerInfo(ploc, objectId, objectInfo);
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint="LocbkGetObjectHandlerInfo")]
+-        internal static extern unsafe LsErr LocbkGetObjectHandlerInfo(
++        private static extern unsafe LsErr LocbkGetObjectHandlerInfoImpl(
+             IntPtr                  ploc,               // Line Services context
+             uint                    objectId,           // installed object id
+             void*                   objectInfo          // object handler info
+@@ -1610,19 +1975,57 @@ private static unsafe IntPtr PinEscChar(IntPtr existing, char value)
+             return block;
+         }
+ 
++        internal static LsErr LoAcquirePenaltyModule(
++            IntPtr                  ploc,       // Line Services context
++            out IntPtr              penaltyModuleHandle
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LoAcquirePenaltyModuleImpl(ploc, out penaltyModuleHandle);
++            }
++
++            return (LsErr)NovaLineServices.LoExports.LoAcquirePenaltyModule(ploc, out penaltyModuleHandle);
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint = "LoAcquirePenaltyModule")]
+-        internal static extern LsErr LoAcquirePenaltyModule(
++        private static extern LsErr LoAcquirePenaltyModuleImpl(
+             IntPtr                  ploc,       // Line Services context
+             out IntPtr              penaltyModuleHandle
+             );
+ 
++        internal static LsErr LoDisposePenaltyModule(
++            IntPtr                  penaltyModuleHandle
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LoDisposePenaltyModuleImpl(penaltyModuleHandle);
++            }
++
++            return (LsErr)NovaLineServices.LoExports.LoDisposePenaltyModule(penaltyModuleHandle);
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint = "LoDisposePenaltyModule")]
+-        internal static extern LsErr LoDisposePenaltyModule(
++        private static extern LsErr LoDisposePenaltyModuleImpl(
+             IntPtr                  penaltyModuleHandle
+             );
+ 
++        internal static LsErr LoGetPenaltyModuleInternalHandle(
++            IntPtr                  penaltyModuleHandle,
++            out IntPtr              penaltyModuleInternalHandle
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return LoGetPenaltyModuleInternalHandleImpl(penaltyModuleHandle, out penaltyModuleInternalHandle);
++            }
++
++            return (LsErr)NovaLineServices.LoExports.LoGetPenaltyModuleInternalHandle(penaltyModuleHandle, out penaltyModuleInternalHandle);
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint = "LoGetPenaltyModuleInternalHandle")]
+-        internal static extern LsErr LoGetPenaltyModuleInternalHandle(
++        private static extern LsErr LoGetPenaltyModuleInternalHandleImpl(
+             IntPtr                  penaltyModuleHandle,
+             out IntPtr              penaltyModuleInternalHandle
+             );
+@@ -1630,35 +2033,841 @@ out IntPtr              penaltyModuleInternalHandle
+         /// <summary>
+         /// This method creates an object that implements IDWriteTextAnalysisSink that is defined in PresentationNative*.dll.
+         /// </summary>
++        internal static unsafe void* CreateTextAnalysisSink()
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return CreateTextAnalysisSinkImpl();
++            }
++
++            return NovaLineServices.LoExports.CreateTextAnalysisSink();
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint = "CreateTextAnalysisSink")]
+-        internal static extern unsafe void* CreateTextAnalysisSink();
++        private static extern unsafe void* CreateTextAnalysisSinkImpl();
+ 
+         /// <summary>
+         /// This method is passed the IDWriteTextAnalysisSink object we get using CreateTextAnalysisSink to retrieve
+         /// the results from analyzing the scripts.
+         /// </summary>
++        internal static unsafe void* GetScriptAnalysisList(void* textAnalysisSink)
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return GetScriptAnalysisListImpl(textAnalysisSink);
++            }
++
++            return NovaLineServices.LoExports.GetScriptAnalysisList(textAnalysisSink);
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint = "GetScriptAnalysisList")]
+-        internal static extern unsafe void* GetScriptAnalysisList(void* textAnalysisSink);
++        private static extern unsafe void* GetScriptAnalysisListImpl(void* textAnalysisSink);
+ 
+         /// <summary>
+         /// This method is passed the IDWriteTextAnalysisSink object we get using CreateTextAnalysisSink to retrieve
+         /// the results from analyzing the number substitution.
+         /// </summary>
++        internal static unsafe void* GetNumberSubstitutionList(void* textAnalysisSink)
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return GetNumberSubstitutionListImpl(textAnalysisSink);
++            }
++
++            return NovaLineServices.LoExports.GetNumberSubstitutionList(textAnalysisSink);
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint = "GetNumberSubstitutionList")]
+-        internal static extern unsafe void* GetNumberSubstitutionList(void* textAnalysisSink);
++        private static extern unsafe void* GetNumberSubstitutionListImpl(void* textAnalysisSink);
+ 
+         /// <summary>
+         /// This method creates an object that implements IDWriteTextAnalysiSource that is defined in PresentationNative*.dll.
+         /// </summary>
++        internal static unsafe int CreateTextAnalysisSource(char* text,
++                                                             uint    length,
++                                                             char*   culture,
++                                                             void*   factory,
++                                                             bool    isRightToLeft,
++                                                             char*   numberCulture,
++                                                             bool    ignoreUserOverride,
++                                                             uint    numberSubstitutionMethod,
++                                                             void**  ppTextAnalysisSource)
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return CreateTextAnalysisSourceImpl(text,
++                                                    length,
++                                                    culture,
++                                                    factory,
++                                                    isRightToLeft,
++                                                    numberCulture,
++                                                    ignoreUserOverride,
++                                                    numberSubstitutionMethod,
++                                                    ppTextAnalysisSource);
++            }
++
++            return NovaLineServices.LoExports.CreateTextAnalysisSource(text,
++                                                                       length,
++                                                                       culture,
++                                                                       factory,
++                                                                       isRightToLeft,
++                                                                       numberCulture,
++                                                                       ignoreUserOverride,
++                                                                       numberSubstitutionMethod,
++                                                                       ppTextAnalysisSource);
++        }
++
+         [DllImport(DllImport.PresentationNative, EntryPoint = "CreateTextAnalysisSource")]
+-        internal static extern unsafe int CreateTextAnalysisSource(char* text,
+-                                                                   uint    length,
+-                                                                   char*   culture,
+-                                                                   void*   factory,
+-                                                                   bool    isRightToLeft,
+-                                                                   char*   numberCulture,
+-                                                                   bool    ignoreUserOverride,
+-                                                                   uint    numberSubstitutionMethod,
+-                                                                   void**  ppTextAnalysisSource);
++        private static extern unsafe int CreateTextAnalysisSourceImpl(char* text,
++                                                                      uint    length,
++                                                                      char*   culture,
++                                                                      void*   factory,
++                                                                      bool    isRightToLeft,
++                                                                      char*   numberCulture,
++                                                                      bool    ignoreUserOverride,
++                                                                      uint    numberSubstitutionMethod,
++                                                                      void**  ppTextAnalysisSource);
++
++        //
++        //  Linux managed Line Services (Nova.LineServices)
++        //
++        //  PresentationNative_cor3.dll does not exist on Linux. The Lo* methods above field-copy
++        //  the nest structs into the Nova.LineServices structs (identical sequential layout, but
++        //  LsContextInfo's typed callback delegates become pointer-sized slots) and call the
++        //  isolated managed engine. WPF's own delegates stay WPF types and are driven through
++        //  trampolines that adapt LsPap / LsLineProps / LsChp / LsTxM field-by-field; nothing is
++        //  reinterpret-cast, so the typed callback table in LsContextInfo is never corrupted.
++        //  pols is passed through unchanged: like the native API, Nova fills the context's pols
++        //  with the context handle and passes that handle to the callbacks.
++        //
++
++        private static unsafe LsErr LoCreateContextLinux(
++            ref LsContextInfo contextInfo,
++            ref LscbkRedefined lscbkRedef,
++            out IntPtr ploc)
++        {
++            LsContextInfo client = contextInfo;
++            LscbkRedefined clientRedef = lscbkRedef;
++
++            NovaLineServices.LsContextInfo info = default;
++            NovaLineServices.FetchLineProps fetchLinePropsTrampoline =
++                (pols, lscpFetch, firstLineInPara, ref lsLineProps) =>
++                    FetchLinePropsTrampoline(client, pols, lscpFetch, firstLineInPara, ref lsLineProps);
++            CopyContextInfoToNova(client, fetchLinePropsTrampoline, ref info);
++
++            NovaLineServices.LscbkRedefined redef = default;
++            redef.pfnFetchRunRedefined = (IntPtr pols, int lscpFetch, int fIsStyle, IntPtr pstyle, char* pwchTextBuffer, int cchTextBuffer, ref int fIsBufferUsed, out char* pwchText, ref int cchText, ref int fIsHidden, ref NovaLineServices.LsChp lschp, ref IntPtr lsplsrun) =>
++                FetchRunRedefinedTrampoline(clientRedef, pols, lscpFetch, fIsStyle, pstyle, pwchTextBuffer, cchTextBuffer, ref fIsBufferUsed, out pwchText, ref cchText, ref fIsHidden, ref lschp, ref lsplsrun);
++            redef.pfnGetGlyphsRedefined = FunctionPointerOf(clientRedef.pfnGetGlyphsRedefined);
++            redef.pfnFetchLineProps = fetchLinePropsTrampoline;
++
++            LsErr err = (LsErr)NovaLineServices.LoExports.LoCreateContext(ref info, ref redef, out ploc);
++            if (err == LsErr.None)
++            {
++                // Like the native API, LoExports fills pols with the new context handle.
++                contextInfo.pols = info.pols;
++            }
++
++            return err;
++        }
++
++        private static unsafe void CopyContextInfoToNova(
++            LsContextInfo client,
++            NovaLineServices.FetchLineProps fetchLinePropsTrampoline,
++            ref NovaLineServices.LsContextInfo target)
++        {
++            target.version = client.version;
++            target.cInstalledHandlers = client.cInstalledHandlers;
++            target.plsimethods = client.plsimethods;
++            target.cEstimatedCharsPerLine = client.cEstimatedCharsPerLine;
++            target.cJustPriorityLim = client.cJustPriorityLim;
++            target.wchUndef = client.wchUndef;
++            target.wchNull = client.wchNull;
++            target.wchSpace = client.wchSpace;
++            target.wchHyphen = client.wchHyphen;
++            target.wchTab = client.wchTab;
++            target.wchPosTab = client.wchPosTab;
++            target.wchEndPara1 = client.wchEndPara1;
++            target.wchEndPara2 = client.wchEndPara2;
++            target.wchAltEndPara = client.wchAltEndPara;
++            target.wchEndLineInPara = client.wchEndLineInPara;
++            target.wchColumnBreak = client.wchColumnBreak;
++            target.wchSectionBreak = client.wchSectionBreak;
++            target.wchPageBreak = client.wchPageBreak;
++            target.wchNonBreakSpace = client.wchNonBreakSpace;
++            target.wchNonBreakHyphen = client.wchNonBreakHyphen;
++            target.wchNonReqHyphen = client.wchNonReqHyphen;
++            target.wchEmDash = client.wchEmDash;
++            target.wchEnDash = client.wchEnDash;
++            target.wchEmSpace = client.wchEmSpace;
++            target.wchEnSpace = client.wchEnSpace;
++            target.wchNarrowSpace = client.wchNarrowSpace;
++            target.wchOptBreak = client.wchOptBreak;
++            target.wchNoBreak = client.wchNoBreak;
++            target.wchFESpace = client.wchFESpace;
++            target.wchJoiner = client.wchJoiner;
++            target.wchNonJoiner = client.wchNonJoiner;
++            target.wchToReplace = client.wchToReplace;
++            target.wchReplace = client.wchReplace;
++            target.wchVisiNull = client.wchVisiNull;
++            target.wchVisiAltEndPara = client.wchVisiAltEndPara;
++            target.wchVisiEndLineInPara = client.wchVisiEndLineInPara;
++            target.wchVisiEndPara = client.wchVisiEndPara;
++            target.wchVisiSpace = client.wchVisiSpace;
++            target.wchVisiNonBreakSpace = client.wchVisiNonBreakSpace;
++            target.wchVisiNonBreakHyphen = client.wchVisiNonBreakHyphen;
++            target.wchVisiNonReqHyphen = client.wchVisiNonReqHyphen;
++            target.wchVisiTab = client.wchVisiTab;
++            target.wchVisiPosTab = client.wchVisiPosTab;
++            target.wchVisiEmSpace = client.wchVisiEmSpace;
++            target.wchVisiEnSpace = client.wchVisiEnSpace;
++            target.wchVisiNarrowSpace = client.wchVisiNarrowSpace;
++            target.wchVisiOptBreak = client.wchVisiOptBreak;
++            target.wchVisiNoBreak = client.wchVisiNoBreak;
++            target.wchVisiFESpace = client.wchVisiFESpace;
++            target.wchEscAnmRun = client.wchEscAnmRun;
++            target.wchPad = client.wchPad;
++            target.pols = client.pols;
++            target.pfnNewPtr = client.pfnNewPtr;
++            target.pfnDisposePtr = client.pfnDisposePtr;
++            target.pfnReallocPtr = client.pfnReallocPtr;
++            target.pfnFetchRun = client.pfnFetchRun;
++            target.pfnGetAutoNumberInfo = FunctionPointerOf(client.pfnGetAutoNumberInfo);
++            target.pfnGetNumericSeparators = client.pfnGetNumericSeparators;
++            target.pfnCheckForDigit = client.pfnCheckForDigit;
++            target.pfnFetchPap = (pols, lscpFetch, ref lspap) =>
++                FetchPapTrampoline(client, pols, lscpFetch, ref lspap);
++            target.pfnFetchLineProps = fetchLinePropsTrampoline;
++            target.pfnFetchTabs = client.pfnFetchTabs;
++            target.pfnReleaseTabsBuffer = client.pfnReleaseTabsBuffer;
++            target.pfnGetBreakThroughTab = client.pfnGetBreakThroughTab;
++            target.pfnGetPosTabProps = client.pfnGetPosTabProps;
++            target.pfnFGetLastLineJustification = client.pfnFGetLastLineJustification;
++            target.pfnCheckParaBoundaries = client.pfnCheckParaBoundaries;
++            target.pfnGetRunCharWidths = (pols, plsrun, device, runText, cchRun, maxWidth, textFlow, charWidths, ref totalWidth, ref cchProcessed) =>
++                GetRunCharWidthsTrampoline(client, pols, plsrun, device, runText, cchRun, maxWidth, textFlow, charWidths, ref totalWidth, ref cchProcessed);
++            target.pfnCheckRunKernability = client.pfnCheckRunKernability;
++            target.pfnGetRunCharKerning = client.pfnGetRunCharKerning;
++            target.pfnGetRunTextMetrics = (pols, plsrun, lsDevice, lstFlow, ref lstTextMetrics) =>
++                GetRunTextMetricsTrampoline(client, pols, plsrun, lsDevice, lstFlow, ref lstTextMetrics);
++            target.pfnGetRunUnderlineInfo = FunctionPointerOf(client.pfnGetRunUnderlineInfo);
++            target.pfnGetRunStrikethroughInfo = FunctionPointerOf(client.pfnGetRunStrikethroughInfo);
++            target.pfnGetBorderInfo = client.pfnGetBorderInfo;
++            target.pfnReleaseRun = client.pfnReleaseRun;
++            target.pfnReleaseRunBuffer = client.pfnReleaseRunBuffer;
++            target.pfnHyphenate = FunctionPointerOf(client.pfnHyphenate);
++            target.pfnGetPrevHyphenOpp = FunctionPointerOf(client.pfnGetPrevHyphenOpp);
++            target.pfnGetNextHyphenOpp = FunctionPointerOf(client.pfnGetNextHyphenOpp);
++            target.pfnGetHyphenInfo = client.pfnGetHyphenInfo;
++            target.pfnDrawUnderline = FunctionPointerOf(client.pfnDrawUnderline);
++            target.pfnDrawStrikethrough = FunctionPointerOf(client.pfnDrawStrikethrough);
++            target.pfnDrawBorder = client.pfnDrawBorder;
++            target.pfnFInterruptUnderline = client.pfnFInterruptUnderline;
++            target.pfnFInterruptShade = client.pfnFInterruptShade;
++            target.pfnFInterruptBorder = client.pfnFInterruptBorder;
++            target.pfnShadeRectangle = client.pfnShadeRectangle;
++            target.pfnDrawTextRun = client.pfnDrawTextRun == null ? null : CreateDrawTextRunTrampoline(client);
++            target.pfnDrawSplatLine = client.pfnDrawSplatLine;
++            target.pfnFInterruptShaping = FunctionPointerOf(client.pfnFInterruptShaping);
++            target.pfnGetGlyphs = client.pfnGetGlyphs;
++            target.pfnGetGlyphPositions = FunctionPointerOf(client.pfnGetGlyphPositions);
++            target.pfnDrawGlyphs = FunctionPointerOf(client.pfnDrawGlyphs);
++            target.pfnReleaseGlyphBuffers = client.pfnReleaseGlyphBuffers;
++            target.pfnGetGlyphExpansionInfo = client.pfnGetGlyphExpansionInfo;
++            target.pfnGetGlyphExpansionInkInfo = client.pfnGetGlyphExpansionInkInfo;
++            target.pfnGetGlyphRunInk = client.pfnGetGlyphRunInk;
++            target.pfnGetEms = client.pfnGetEms;
++            target.pfnPunctStartLine = client.pfnPunctStartLine;
++            target.pfnModWidthOnRun = client.pfnModWidthOnRun;
++            target.pfnModWidthSpace = client.pfnModWidthSpace;
++            target.pfnCompOnRun = client.pfnCompOnRun;
++            target.pfnCompWidthSpace = client.pfnCompWidthSpace;
++            target.pfnExpOnRun = client.pfnExpOnRun;
++            target.pfnExpWidthSpace = client.pfnExpWidthSpace;
++            target.pfnGetModWidthClasses = client.pfnGetModWidthClasses;
++            target.pfnGetBreakingClasses = client.pfnGetBreakingClasses;
++            target.pfnFTruncateBefore = client.pfnFTruncateBefore;
++            target.pfnCanBreakBeforeChar = client.pfnCanBreakBeforeChar;
++            target.pfnCanBreakAfterChar = client.pfnCanBreakAfterChar;
++            target.pfnFHangingPunct = client.pfnFHangingPunct;
++            target.pfnGetSnapGrid = client.pfnGetSnapGrid;
++            target.pfnDrawEffects = client.pfnDrawEffects;
++            target.pfnFCancelHangingPunct = client.pfnFCancelHangingPunct;
++            target.pfnModifyCompAtLastChar = client.pfnModifyCompAtLastChar;
++            target.pfnGetDurMaxExpandRagged = FunctionPointerOf(client.pfnGetDurMaxExpandRagged);
++            target.pfnGetCharExpansionInfoFullMixed = FunctionPointerOf(client.pfnGetCharExpansionInfoFullMixed);
++            target.pfnGetGlyphExpansionInfoFullMixed = FunctionPointerOf(client.pfnGetGlyphExpansionInfoFullMixed);
++            target.pfnGetCharCompressionInfoFullMixed = FunctionPointerOf(client.pfnGetCharCompressionInfoFullMixed);
++            target.pfnGetGlyphCompressionInfoFullMixed = FunctionPointerOf(client.pfnGetGlyphCompressionInfoFullMixed);
++            target.pfnGetCharAlignmentStartLine = client.pfnGetCharAlignmentStartLine;
++            target.pfnGetCharAlignmentEndLine = client.pfnGetCharAlignmentEndLine;
++            target.pfnGetGlyphAlignmentStartLine = client.pfnGetGlyphAlignmentStartLine;
++            target.pfnGetGlyphAlignmentEndLine = client.pfnGetGlyphAlignmentEndLine;
++            target.pfnGetPriorityForGoodTypography = client.pfnGetPriorityForGoodTypography;
++            target.pfnEnumText = client.pfnEnumText == null ? null : CreateEnumTextTrampoline(client);
++            target.pfnEnumTab = client.pfnEnumTab == null ? null : CreateEnumTabTrampoline(client);
++            target.pfnEnumPen = client.pfnEnumPen;
++            target.pfnGetObjectHandlerInfo = FunctionPointerOf(client.pfnGetObjectHandlerInfo);
++            target.pfnAssertFailedPtr = client.pfnAssertFailedPtr;
++            target.fDontReleaseRuns = client.fDontReleaseRuns;
++        }
++
++        private static IntPtr FunctionPointerOf<TDelegate>(TDelegate callback) where TDelegate : Delegate
++        {
++            return callback is null ? IntPtr.Zero : Marshal.GetFunctionPointerForDelegate(callback);
++        }
++
++        /// <summary>
++        /// Adapts the WPF <c>DrawTextRun</c> delegate to the Nova.LineServices signature by
++        /// field-copying the shared layout structs (LSPOINT / LsHeights / LSRECT) in and out.
++        /// A managed trampoline (not a function pointer) is required: the engine cannot
++        /// <c>GetDelegateForFunctionPointer</c> a thunk created from the WPF delegate type
++        /// (InvalidCastException), and a direct delegate cast across the two distinct types is
++        /// not ABI-safe. The trampoline is kept alive by the engine's copied context info.
++        /// </summary>
++        private static unsafe NovaLineServices.DrawTextRun CreateDrawTextRunTrampoline(LsContextInfo client)
++        {
++            return delegate (
++                IntPtr pols,
++                NovaLineServices.Plsrun plsrun,
++                ref NovaLineServices.LSPOINT ptText,
++                char* runText,
++                int* charWidths,
++                int cchText,
++                NovaLineServices.LsTFlow textFlow,
++                uint displayMode,
++                ref NovaLineServices.LSPOINT ptRun,
++                ref NovaLineServices.LsHeights lsHeights,
++                int dupRun,
++                ref NovaLineServices.LSRECT clipRect)
++            {
++                LSPOINT nestPtText = default;
++                nestPtText.x = ptText.x;
++                nestPtText.y = ptText.y;
++                LSPOINT nestPtRun = default;
++                nestPtRun.x = ptRun.x;
++                nestPtRun.y = ptRun.y;
++                LsHeights nestHeights = default;
++                nestHeights.dvAscent = lsHeights.dvAscent;
++                nestHeights.dvDescent = lsHeights.dvDescent;
++                nestHeights.dvMultiLineHeight = lsHeights.dvMultiLineHeight;
++                LSRECT nestClipRect = default;
++                nestClipRect.left = clipRect.left;
++                nestClipRect.top = clipRect.top;
++                nestClipRect.right = clipRect.right;
++                nestClipRect.bottom = clipRect.bottom;
++
++                LsErr err = client.pfnDrawTextRun(
++                    pols,
++                    (Plsrun)plsrun,
++                    ref nestPtText,
++                    runText,
++                    charWidths,
++                    cchText,
++                    (LsTFlow)textFlow,
++                    displayMode,
++                    ref nestPtRun,
++                    ref nestHeights,
++                    dupRun,
++                    ref nestClipRect);
++
++                ptText.x = nestPtText.x;
++                ptText.y = nestPtText.y;
++                ptRun.x = nestPtRun.x;
++                ptRun.y = nestPtRun.y;
++                lsHeights.dvAscent = nestHeights.dvAscent;
++                lsHeights.dvDescent = nestHeights.dvDescent;
++                lsHeights.dvMultiLineHeight = nestHeights.dvMultiLineHeight;
++                clipRect.left = nestClipRect.left;
++                clipRect.top = nestClipRect.top;
++                clipRect.right = nestClipRect.right;
++                clipRect.bottom = nestClipRect.bottom;
++
++                return (NovaLineServices.LsErr)err;
++            };
++        }
++
++        private static NovaLineServices.LsErr FetchPapTrampoline(
++            LsContextInfo client,
++            IntPtr pols,
++            int lscpFetch,
++            ref NovaLineServices.LsPap lspap)
++        {
++            LsPap nestPap = default;
++            LsErr err = client.pfnFetchPap(pols, lscpFetch, ref nestPap);
++            CopyPapToNova(nestPap, ref lspap);
++            return (NovaLineServices.LsErr)err;
++        }
++
++        /// <summary>
++        /// Adapts the WPF <c>EnumText</c> delegate to the Nova.LineServices signature by
++        /// field-copying the shared layout structs (LSPOINT / LsHeights) in and out. Managed
++        /// trampoline, same reasoning as <see cref="CreateDrawTextRunTrampoline"/>.
++        /// </summary>
++        private static unsafe NovaLineServices.EnumText CreateEnumTextTrampoline(LsContextInfo client)
++        {
++            return delegate (
++                IntPtr pols,
++                NovaLineServices.Plsrun plsrun,
++                int cpFirst,
++                int dcp,
++                char* pwchText,
++                int cchText,
++                NovaLineServices.LsTFlow lstFlow,
++                int fReverseOrder,
++                int fGeometryProvided,
++                ref NovaLineServices.LSPOINT pptStart,
++                ref NovaLineServices.LsHeights pheights,
++                int dupRun,
++                int glyphBaseRun,
++                int* charWidths,
++                ushort* pClusterMap,
++                ushort* characterProperties,
++                ushort* puglyphs,
++                int* pGlyphAdvances,
++                NovaLineServices.GlyphOffset* pGlyphOffsets,
++                uint* pGlyphProperties,
++                int glyphCount)
++            {
++                LSPOINT nestPptStart = default;
++                nestPptStart.x = pptStart.x;
++                nestPptStart.y = pptStart.y;
++                LsHeights nestHeights = default;
++                nestHeights.dvAscent = pheights.dvAscent;
++                nestHeights.dvDescent = pheights.dvDescent;
++                nestHeights.dvMultiLineHeight = pheights.dvMultiLineHeight;
++
++                LsErr err = client.pfnEnumText(
++                    pols,
++                    (Plsrun)plsrun,
++                    cpFirst,
++                    dcp,
++                    pwchText,
++                    cchText,
++                    (LsTFlow)lstFlow,
++                    fReverseOrder,
++                    fGeometryProvided,
++                    ref nestPptStart,
++                    ref nestHeights,
++                    dupRun,
++                    glyphBaseRun,
++                    charWidths,
++                    pClusterMap,
++                    characterProperties,
++                    puglyphs,
++                    pGlyphAdvances,
++                    (GlyphOffset*)pGlyphOffsets,
++                    pGlyphProperties,
++                    glyphCount);
++
++                pptStart.x = nestPptStart.x;
++                pptStart.y = nestPptStart.y;
++                pheights.dvAscent = nestHeights.dvAscent;
++                pheights.dvDescent = nestHeights.dvDescent;
++                pheights.dvMultiLineHeight = nestHeights.dvMultiLineHeight;
++
++                return (NovaLineServices.LsErr)err;
++            };
++        }
++
++        /// <summary>
++        /// Adapts the WPF <c>EnumTab</c> delegate to the Nova.LineServices signature by
++        /// field-copying the shared layout structs (LSPOINT / LsHeights) in and out. Managed
++        /// trampoline, same reasoning as <see cref="CreateDrawTextRunTrampoline"/>.
++        /// </summary>
++        private static unsafe NovaLineServices.EnumTab CreateEnumTabTrampoline(LsContextInfo client)
++        {
++            return delegate (
++                IntPtr pols,
++                NovaLineServices.Plsrun plsrun,
++                int cpFirst,
++                char* pwchText,
++                char tabLeader,
++                NovaLineServices.LsTFlow lstFlow,
++                int fReverseOrder,
++                int fGeometryProvided,
++                ref NovaLineServices.LSPOINT pptStart,
++                ref NovaLineServices.LsHeights heights,
++                int dupRun)
++            {
++                LSPOINT nestPptStart = default;
++                nestPptStart.x = pptStart.x;
++                nestPptStart.y = pptStart.y;
++                LsHeights nestHeights = default;
++                nestHeights.dvAscent = heights.dvAscent;
++                nestHeights.dvDescent = heights.dvDescent;
++                nestHeights.dvMultiLineHeight = heights.dvMultiLineHeight;
++
++                LsErr err = client.pfnEnumTab(
++                    pols,
++                    (Plsrun)plsrun,
++                    cpFirst,
++                    pwchText,
++                    tabLeader,
++                    (LsTFlow)lstFlow,
++                    fReverseOrder,
++                    fGeometryProvided,
++                    ref nestPptStart,
++                    ref nestHeights,
++                    dupRun);
++
++                pptStart.x = nestPptStart.x;
++                pptStart.y = nestPptStart.y;
++                heights.dvAscent = nestHeights.dvAscent;
++                heights.dvDescent = nestHeights.dvDescent;
++                heights.dvMultiLineHeight = nestHeights.dvMultiLineHeight;
++
++                return (NovaLineServices.LsErr)err;
++            };
++        }
++
++        private static NovaLineServices.LsErr FetchLinePropsTrampoline(
++            LsContextInfo client,
++            IntPtr pols,
++            int lscpFetch,
++            int firstLineInPara,
++            ref NovaLineServices.LsLineProps lsLineProps)
++        {
++            LsLineProps nestLineProps = default;
++            LsErr err = client.pfnFetchLineProps(pols, lscpFetch, firstLineInPara, ref nestLineProps);
++            CopyLinePropsToNova(nestLineProps, ref lsLineProps);
++            return (NovaLineServices.LsErr)err;
++        }
++
++        private static unsafe NovaLineServices.LsErr GetRunCharWidthsTrampoline(
++            LsContextInfo client,
++            IntPtr pols,
++            NovaLineServices.Plsrun plsrun,
++            NovaLineServices.LsDevice device,
++            char* runText,
++            int cchRun,
++            int maxWidth,
++            NovaLineServices.LsTFlow textFlow,
++            int* charWidths,
++            ref int totalWidth,
++            ref int cchProcessed)
++        {
++            return (NovaLineServices.LsErr)client.pfnGetRunCharWidths(
++                pols,
++                (Plsrun)plsrun,
++                (LsDevice)device,
++                runText,
++                cchRun,
++                maxWidth,
++                (LsTFlow)textFlow,
++                charWidths,
++                ref totalWidth,
++                ref cchProcessed);
++        }
++
++        private static NovaLineServices.LsErr GetRunTextMetricsTrampoline(
++            LsContextInfo client,
++            IntPtr pols,
++            NovaLineServices.Plsrun plsrun,
++            NovaLineServices.LsDevice lsDevice,
++            NovaLineServices.LsTFlow lstFlow,
++            ref NovaLineServices.LsTxM lstTextMetrics)
++        {
++            LsTxM nestTextMetrics = default;
++            LsErr err = client.pfnGetRunTextMetrics(
++                pols,
++                (Plsrun)plsrun,
++                (LsDevice)lsDevice,
++                (LsTFlow)lstFlow,
++                ref nestTextMetrics);
++            CopyTxMToNova(nestTextMetrics, ref lstTextMetrics);
++            return (NovaLineServices.LsErr)err;
++        }
++
++        private static unsafe NovaLineServices.LsErr FetchRunRedefinedTrampoline(
++            LscbkRedefined clientRedef,
++            IntPtr pols,
++            int lscpFetch,
++            int fIsStyle,
++            IntPtr pstyle,
++            char* pwchTextBuffer,
++            int cchTextBuffer,
++            ref int fIsBufferUsed,
++            out char* pwchText,
++            ref int cchText,
++            ref int fIsHidden,
++            ref NovaLineServices.LsChp lschp,
++            ref IntPtr lsplsrun)
++        {
++            LsChp nestChp = default;
++            LsErr err = clientRedef.pfnFetchRunRedefined(
++                pols,
++                lscpFetch,
++                fIsStyle,
++                pstyle,
++                pwchTextBuffer,
++                cchTextBuffer,
++                ref fIsBufferUsed,
++                out pwchText,
++                ref cchText,
++                ref fIsHidden,
++                ref nestChp,
++                ref lsplsrun);
++            CopyChpToNova(nestChp, ref lschp);
++            return (NovaLineServices.LsErr)err;
++        }
++
++        private static void CopyPapToNova(LsPap source, ref NovaLineServices.LsPap target)
++        {
++            target.cpFirst = source.cpFirst;
++            target.cpFirstContent = source.cpFirstContent;
++            target.grpf = (NovaLineServices.LsPapOptions)source.grpf;
++            target.lsbrj = (NovaLineServices.LsBreakJust)source.lsbrj;
++            target.lskj = (NovaLineServices.LsKJust)source.lskj;
++            target.fJustify = source.fJustify;
++            target.durAutoDecimalTab = source.durAutoDecimalTab;
++            target.lskeop = (NovaLineServices.LsKEOP)source.lskeop;
++            target.lstflow = (NovaLineServices.LsTFlow)source.lstflow;
++        }
++
++        private static void CopyLinePropsToNova(LsLineProps source, ref NovaLineServices.LsLineProps target)
++        {
++            target.lskal = (NovaLineServices.LsKAlign)source.lskal;
++            target.durLeft = source.durLeft;
++            target.durRightBreak = source.durRightBreak;
++            target.durRightJustify = source.durRightJustify;
++            target.fProhibitHyphenation = source.fProhibitHyphenation;
++            target.durHyphenationZone = source.durHyphenationZone;
++        }
++
++        private static void CopyChpToNova(LsChp source, ref NovaLineServices.LsChp target)
++        {
++            target.idObj = source.idObj;
++            target.dcpMaxContent = source.dcpMaxContent;
++            target.effectsFlags = source.effectsFlags;
++            target.flags = (NovaLineServices.LsChpOptions)source.flags;
++            target.dvpPos = source.dvpPos;
++        }
++
++        private static void CopyTxMToNova(LsTxM source, ref NovaLineServices.LsTxM target)
++        {
++            target.dvAscent = source.dvAscent;
++            target.dvDescent = source.dvDescent;
++            target.dvMultiLineHeight = source.dvMultiLineHeight;
++            target.fMonospaced = source.fMonospaced;
++        }
++
++        private static LsErr LoCreateLineLinux(
++            IntPtr ploc,
++            int cp,
++            int ccpLim,
++            int durColumn,
++            uint dwLineFlags,
++            IntPtr pInputBreakRec,
++            out LsLInfo plslinfo,
++            out IntPtr pploline,
++            out int maxDepth,
++            out LsLineWidths lineWidths)
++        {
++            NovaLineServices.LsLInfo novaLInfo = default;
++            NovaLineServices.LsLineWidths novaLineWidths = default;
++            LsErr err = (LsErr)NovaLineServices.LoExports.LoCreateLine(
++                ploc,
++                cp,
++                ccpLim,
++                durColumn,
++                dwLineFlags,
++                pInputBreakRec,
++                out novaLInfo,
++                out pploline,
++                out maxDepth,
++                out novaLineWidths);
++            CopyLInfoToNest(novaLInfo, out plslinfo);
++            CopyLineWidthsToNest(novaLineWidths, out lineWidths);
++            return err;
++        }
++
++        private static void CopyLInfoToNest(NovaLineServices.LsLInfo source, out LsLInfo target)
++        {
++            target = default;
++            target.dvpAscent = source.dvpAscent;
++            target.dvrAscent = source.dvrAscent;
++            target.dvpDescent = source.dvpDescent;
++            target.dvrDescent = source.dvrDescent;
++            target.dvpMultiLineHeight = source.dvpMultiLineHeight;
++            target.dvrMultiLineHeight = source.dvrMultiLineHeight;
++            target.dvpAscentAutoNumber = source.dvpAscentAutoNumber;
++            target.dvrAscentAutoNumber = source.dvrAscentAutoNumber;
++            target.dvpDescentAutoNumber = source.dvpDescentAutoNumber;
++            target.dvrDescentAutoNumber = source.dvrDescentAutoNumber;
++            target.cpLimToContinue = source.cpLimToContinue;
++            target.cpLimToStay = source.cpLimToStay;
++            target.dcpDepend = source.dcpDepend;
++            target.cpFirstVis = source.cpFirstVis;
++            target.endr = (LsEndRes)source.endr;
++            target.fAdvanced = source.fAdvanced;
++            target.vaAdvance = source.vaAdvance;
++            target.fFirstLineInPara = source.fFirstLineInPara;
++            target.fTabInMarginExLine = source.fTabInMarginExLine;
++            target.fForcedBreak = source.fForcedBreak;
++            target.EffectsFlags = source.EffectsFlags;
++        }
++
++        private static void CopyLineWidthsToNest(NovaLineServices.LsLineWidths source, out LsLineWidths target)
++        {
++            target = default;
++            target.upStartMarker = source.upStartMarker;
++            target.upLimMarker = source.upLimMarker;
++            target.upStartMainText = source.upStartMainText;
++            target.upStartTrailing = source.upStartTrailing;
++            target.upLimLine = source.upLimLine;
++            target.upMinStartTrailing = source.upMinStartTrailing;
++            target.upMinLimLine = source.upMinLimLine;
++        }
++
++        private static LsErr LoSetDocLinux(
++            IntPtr ploc,
++            int isDisplay,
++            int isReferencePresentationEqual,
++            ref LsDevRes deviceInfo)
++        {
++            NovaLineServices.LsDevRes novaDeviceInfo = default;
++            novaDeviceInfo.dxpInch = deviceInfo.dxpInch;
++            novaDeviceInfo.dypInch = deviceInfo.dypInch;
++            novaDeviceInfo.dxrInch = deviceInfo.dxrInch;
++            novaDeviceInfo.dyrInch = deviceInfo.dyrInch;
++            return (LsErr)NovaLineServices.LoExports.LoSetDoc(ploc, isDisplay, isReferencePresentationEqual, ref novaDeviceInfo);
++        }
++
++        private static unsafe LsErr LoSetTabsLinux(
++            IntPtr ploc,
++            int durIncrementalTab,
++            int tabCount,
++            LsTbd* pTabs)
++        {
++            if (tabCount <= 0)
++            {
++                return (LsErr)NovaLineServices.LoExports.LoSetTabs(ploc, durIncrementalTab, tabCount, null);
++            }
++
++            NovaLineServices.LsTbd[] novaTabs = new NovaLineServices.LsTbd[tabCount];
++            for (int i = 0; i < tabCount; i++)
++            {
++                novaTabs[i].lskt = (NovaLineServices.LsKTab)pTabs[i].lskt;
++                novaTabs[i].ur = pTabs[i].ur;
++                novaTabs[i].wchTabLeader = pTabs[i].wchTabLeader;
++                novaTabs[i].wchCharTab = pTabs[i].wchCharTab;
++            }
++
++            fixed (NovaLineServices.LsTbd* pNovaTabs = novaTabs)
++            {
++                return (LsErr)NovaLineServices.LoExports.LoSetTabs(ploc, durIncrementalTab, tabCount, pNovaTabs);
++            }
++        }
++
++        private static LsErr LoDisplayLineLinux(
++            IntPtr ploline,
++            ref LSPOINT pt,
++            uint displayMode,
++            ref LSRECT clipRect)
++        {
++            NovaLineServices.LSPOINT novaPt = default;
++            novaPt.x = pt.x;
++            novaPt.y = pt.y;
++            NovaLineServices.LSRECT novaClipRect = default;
++            novaClipRect.left = clipRect.left;
++            novaClipRect.top = clipRect.top;
++            novaClipRect.right = clipRect.right;
++            novaClipRect.bottom = clipRect.bottom;
++            return (LsErr)NovaLineServices.LoExports.LoDisplayLine(ploline, ref novaPt, displayMode, ref novaClipRect);
++        }
++
++        private static LsErr LoEnumLineLinux(
++            IntPtr ploline,
++            bool reverseOder,
++            bool fGeometryneeded,
++            ref LSPOINT pt)
++        {
++            NovaLineServices.LSPOINT novaPt = default;
++            novaPt.x = pt.x;
++            novaPt.y = pt.y;
++            return (LsErr)NovaLineServices.LoExports.LoEnumLine(ploline, reverseOder, fGeometryneeded, ref novaPt);
++        }
++
++        private static LsErr LoQueryLineCpPpointLinux(
++            IntPtr ploline,
++            int lscpQuery,
++            int depthQueryMax,
++            IntPtr pSubLineInfo,
++            out int actualDepthQuery,
++            out LsTextCell lsTextCell)
++        {
++            NovaLineServices.LsTextCell novaTextCell = default;
++            LsErr err = (LsErr)NovaLineServices.LoExports.LoQueryLineCpPpoint(
++                ploline,
++                lscpQuery,
++                depthQueryMax,
++                pSubLineInfo,
++                out actualDepthQuery,
++                out novaTextCell);
++            CopyTextCellToNest(novaTextCell, out lsTextCell);
++            return err;
++        }
++
++        private static LsErr LoQueryLinePointPcpLinux(
++            IntPtr ploline,
++            ref LSPOINT ptQuery,
++            int depthQueryMax,
++            IntPtr pSubLineInfo,
++            out int actualDepthQuery,
++            out LsTextCell lsTextCell)
++        {
++            NovaLineServices.LSPOINT novaPt = default;
++            novaPt.x = ptQuery.x;
++            novaPt.y = ptQuery.y;
++            NovaLineServices.LsTextCell novaTextCell = default;
++            LsErr err = (LsErr)NovaLineServices.LoExports.LoQueryLinePointPcp(
++                ploline,
++                ref novaPt,
++                depthQueryMax,
++                pSubLineInfo,
++                out actualDepthQuery,
++                out novaTextCell);
++            CopyTextCellToNest(novaTextCell, out lsTextCell);
++            return err;
++        }
++
++        private static void CopyTextCellToNest(NovaLineServices.LsTextCell source, out LsTextCell target)
++        {
++            target = default;
++            target.lscpStartCell = source.lscpStartCell;
++            target.lscpEndCell = source.lscpEndCell;
++            target.pointUvStartCell.x = source.pointUvStartCell.x;
++            target.pointUvStartCell.y = source.pointUvStartCell.y;
++            target.dupCell = source.dupCell;
++            target.cCharsInCell = source.cCharsInCell;
++            target.cGlyphsInCell = source.cGlyphsInCell;
++            target.plsCellDetails = source.plsCellDetails;
++        }
++
++        private static unsafe LsErr LoCreateBreaksLinux(
++            IntPtr ploc,
++            int cpFirst,
++            IntPtr previousBreakRecord,
++            IntPtr ploparabreak,
++            IntPtr ptslinevariantRestriction,
++            ref LsBreaks lsbreaks,
++            out int bestFitIndex)
++        {
++            NovaLineServices.LsBreaks novaBreaks = default;
++            LsErr err = (LsErr)NovaLineServices.LoExports.LoCreateBreaks(
++                ploc,
++                cpFirst,
++                previousBreakRecord,
++                ploparabreak,
++                ptslinevariantRestriction,
++                ref novaBreaks,
++                out bestFitIndex);
++            lsbreaks.cBreaks = novaBreaks.cBreaks;
++            lsbreaks.plslinfoArray = (LsLInfo*)novaBreaks.plslinfoArray;
++            lsbreaks.plinepenaltyArray = novaBreaks.plinepenaltyArray;
++            lsbreaks.pplolineArray = novaBreaks.pplolineArray;
++            return err;
++        }
+     }
+ }
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj b/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj
+index 4351aed..d01ab60 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj
+@@ -1421,6 +1421,10 @@
+     <ProjectReference Include="..\..\..\..\..\..\src\Nova.Classification\Nova.Classification.csproj" />
+   </ItemGroup>
+ 
++  <ItemGroup>
++    <ProjectReference Include="..\..\..\..\..\..\src\Nova.LineServices\Nova.LineServices.csproj" />
++  </ItemGroup>
++
+   <ItemGroup>
+     <MicrosoftPrivateWinFormsReference Include="System.Private.Windows.Core" />
+   </ItemGroup>

@@ -1,0 +1,328 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Runtime-bundle meta-package: ProjectReferences (PrivateAssets=all) to every
+    assembly that ships, plus the XAML build targets, the bundled icon font and
+    the license files. There is no source code here — the package content IS the
+    referenced projects' build outputs.
+
+    Cross-targeting packs both legs (lib/net10.0 + lib/net11.0): the WPF
+    assemblies are genuinely per-TFM, the WPF-free Nova.* closure is collected
+    from the resolved reference paths (the whole reference graph's outputs land
+    in ReferencePath after ResolveReferences, so direct AND transitive project
+    outputs are covered by one collector — no per-project file lists).
+
+    Nova.Pts is single-target net10.0 (WPF-free): the same dll ships in both
+    lib folders.
+
+    Satellites: the WPF assemblies ship their culture satellites (cs de es fr
+    it ja ko pl pt-BR ru tr zh-Hans zh-Hant) — the set is not enumerated here.
+    NovaAddSatellites asks every referenced WPF project for its
+    SatelliteDllsProjectOutputGroup output and packs each file at
+    lib/<tfm>/<culture>/, so any culture-bearing assembly is covered by its
+    ProjectReference alone. Assemblies without satellites contribute nothing.
+  -->
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+    <!-- IncludeBuildOutput=true + direct ProjectReferences: the pack auto-collects
+         each referenced project's output content (dll) into lib/<tfm> — direct
+         only, transitive references do not flow into the nupkg. -->
+    <IncludeBuildOutput>true</IncludeBuildOutput>
+    <IsPackable>true</IsPackable>
+    <IsAotCompatible>false</IsAotCompatible>
+    <SuppressDependenciesWhenPacking>false</SuppressDependenciesWhenPacking>
+    <NoPackageAnalysis>true</NoPackageAnalysis>
+    <IncludeSymbols>false</IncludeSymbols>
+    <IncludeSource>false</IncludeSource>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <!-- Canonical meta-package hook (NuGet/Home#3891, Sven Hübner's packaging
+         series): collect the copy-local outputs of the project references — the
+         ReferenceSourceTarget=ProjectReference filter excludes package
+         references, and copy-local paths exclude ref-assembly and cycle-breaker
+         strays by construction. IncludeBuildOutput=true is required for the
+         TargetsForTfmSpecificBuildOutput hook to run. -->
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);CopyProjectReferencesToPackage</TargetsForTfmSpecificBuildOutput>
+    <!-- The satellite resource dlls are not copy-local; they are added as
+         per-TFM content below. -->
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);NovaAddSatellites</TargetsForTfmSpecificContentInPackage>
+
+    <PackageId>Nova.PresentationFramework</PackageId>
+    <Version>11.0.0-rc.1</Version>
+    <Authors>NovaPresentationFramework contributors</Authors>
+    <Description>Linux host for stock upstream WPF managed assemblies over SDL3 + Vulkan.</Description>
+    <PackageTags>wpf;linux;vulkan;sdl3;xaml;mil;duce</PackageTags>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <Copyright>MIT. Upstream WPF assemblies are MIT (c) .NET Foundation and Contributors; see LICENSE.TXT.</Copyright>
+    <DevelopmentDependency>false</DevelopmentDependency>
+    <!-- The AUTO satellite collection of the referenced projects loses the
+         culture directory (flat package paths) and picks up assemblies we
+         don't ship — keep it empty; NovaAddSatellites derives the exact
+         satellite set from the project references instead. -->
+    <SatelliteResourceLanguages></SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <!--
+    Declared dependencies: everything the bundled assemblies reference that is
+    NOT shipped inside lib/. Silk.NET.* comes from the Silk GitLab prerelease
+    feed; SixLabors.ImageSharp 4.2.0-compat comes from the project's zznty feed;
+    the System.* packages are stable on nuget.org. Versions are resolved through
+    the repo's central package management (Directory.Packages.props).
+  -->
+  <ItemGroup>
+    <PackageReference Include="Silk.NET.SDL" />
+    <PackageReference Include="Silk.NET.Vulkan" />
+    <PackageReference Include="Silk.NET.SDL.Native" />
+    <PackageReference Include="System.IO.Packaging" />
+    <PackageReference Include="System.Windows.Extensions" />
+    <PackageReference Include="System.Configuration.ConfigurationManager" />
+    <PackageReference Include="SixLabors.ImageSharp" />
+    <PackageReference Include="ExCSS" />
+  </ItemGroup>
+
+  <!--
+    Everything that ships, as project references. PrivateAssets=all keeps them
+    out of the nuspec dependency list (they ARE the package). The Nova.* closure
+    is listed explicitly too: transitive references never pack, so every dll the
+    package must contain has exactly one direct ProjectReference here. The WPF
+    cycle breaker produces System.Printing.dll; PresentationUI and the three
+    themes are not transitive dependencies of anything, so they are referenced
+    here explicitly — referencing them is what builds them.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\third_party\dotnet-wpf\src\Microsoft.DotNet.Wpf\src\PresentationCore\PresentationCore.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\third_party\dotnet-wpf\src\Microsoft.DotNet.Wpf\src\PresentationFramework\PresentationFramework.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\third_party\dotnet-wpf\src\Microsoft.DotNet.Wpf\src\WindowsBase\WindowsBase.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\third_party\dotnet-wpf\src\Microsoft.DotNet.Wpf\src\System.Xaml\System.Xaml.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\third_party\dotnet-wpf\src\Microsoft.DotNet.Wpf\src\System.Windows.Controls.Ribbon\System.Windows.Controls.Ribbon.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\WindowsFormsIntegration\WindowsFormsIntegration.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\third_party\dotnet-wpf\src\Microsoft.DotNet.Wpf\src\UIAutomation\UIAutomationTypes\UIAutomationTypes.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\third_party\dotnet-wpf\src\Microsoft.DotNet.Wpf\src\UIAutomation\UIAutomationProvider\UIAutomationProvider.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\third_party\dotnet-wpf\src\Microsoft.DotNet.Wpf\src\Themes\PresentationFramework.Classic\PresentationFramework.Classic.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\third_party\dotnet-wpf\src\Microsoft.DotNet.Wpf\src\Themes\PresentationFramework.Aero2\PresentationFramework.Aero2.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\third_party\dotnet-wpf\src\Microsoft.DotNet.Wpf\src\Themes\PresentationFramework.Fluent\PresentationFramework.Fluent.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\third_party\dotnet-wpf\src\Microsoft.DotNet.Wpf\src\PresentationUI\PresentationUI.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\third_party\dotnet-wpf\src\Microsoft.DotNet.Wpf\src\ReachFramework\ReachFramework.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\third_party\dotnet-wpf\src\Microsoft.DotNet.Wpf\cycle-breakers\System.Printing\System.Printing-PresentationFramework-api-cycle.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\third_party\dotnet-wpf\src\Microsoft.DotNet.Wpf\src\System.Windows.Input.Manipulations\System.Windows.Input.Manipulations.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\third_party\dotnet-wpf\src\Microsoft.DotNet.Wpf\src\System.Windows.Primitives\System.Windows.Primitives.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\Nova.SdlSource\Nova.SdlSource.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\Nova.DesktopTheme.Host\Nova.DesktopTheme.Host.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\Nova.Serialization\Nova.Serialization.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\Nova.Classification\Nova.Classification.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\Nova.DesktopTheme\Nova.DesktopTheme.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\Nova.FontConfig\Nova.FontConfig.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\Nova.FreeType\Nova.FreeType.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\Nova.Geometry\Nova.Geometry.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\Nova.Geometry2D\Nova.Geometry2D.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\Nova.HarfBuzz\Nova.HarfBuzz.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\Nova.Host\Nova.Host.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\Nova.Imaging\Nova.Imaging.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\Nova.LineServices\Nova.LineServices.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\Nova.Mil\Nova.Mil.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\Nova.MilCmd\Nova.MilCmd.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\Nova.Pts\Nova.Pts.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\Nova.Sdl\Nova.Sdl.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\Nova.SystemTheme\Nova.SystemTheme.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\Nova.Text\Nova.Text.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\src\Nova.Vulkan\Nova.Vulkan.csproj" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Paths (relative to this file, packaging/Nova.PresentationFramework/).
+       _RepoRoot is normalized to a full path: the collectors compare resolved
+       paths against it. -->
+  <PropertyGroup>
+    <_RepoRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\'))</_RepoRoot>
+    <!-- The task dll is TFM-agnostic (BCL-only closure); one copy at tools/net11.0
+         serves both net10.0 and net11.0 consumers (buildTransitive props point at it). -->
+    <_SdkWinFxTools>$(MSBuildSDKsPath)\Microsoft.NET.Sdk.WindowsDesktop\tools\net11.0\</_SdkWinFxTools>
+  </PropertyGroup>
+
+  <!-- The WPF projects from the ProjectReference list, minus the ref-assembly
+       and cycle-breaker shims (their outputs are not shipped; only the
+       System.Printing cycle project's output ships, as System.Printing.dll).
+       Derived by a target because evaluation-time ItemGroups do not batch
+       conditions on item metadata (MSBuild expands %(ProjectReference.Identity)
+       literally there); both per-TFM collectors depend on this target. -->
+  <Target Name="NovaDeriveWpfProjects">
+    <ItemGroup>
+      <_NovaWpfProjects Include="@(ProjectReference)"
+        Condition="$([System.IO.Path]::GetFullPath('%(ProjectReference.Identity)', '$(MSBuildProjectDirectory)').StartsWith('$(_RepoRoot)third_party')) And !$([System.IO.Path]::GetFullPath('%(ProjectReference.Identity)', '$(MSBuildProjectDirectory)').Contains('-ref')) And (!$([System.IO.Path]::GetFullPath('%(ProjectReference.Identity)', '$(MSBuildProjectDirectory)').Contains('/cycle-breakers/')) Or $([System.IO.Path]::GetFullPath('%(ProjectReference.Identity)', '$(MSBuildProjectDirectory)').Contains('/cycle-breakers/System.Printing/')))" />
+    </ItemGroup>
+  </Target>
+
+  <!--
+    TFM-independent package content (packed from the OUTER build; no
+    $(TargetFramework) in any path or PackagePath here — the outer cross-
+    targeting Pack evaluates with an empty TargetFramework).
+  -->
+
+  <!--
+    XAML build task assembly, bundled so consumers do not couple to the SDK's
+    WindowsDesktop layout. Its dependency closure is BCL-only
+    (System.Reflection.MetadataLoadContext + MSBuild), no WPF refs.
+  -->
+  <ItemGroup>
+    <None Include="$(_SdkWinFxTools)PresentationBuildTasks.dll" Pack="true" PackagePath="tools/net11.0/" />
+  </ItemGroup>
+
+  <!-- Build-time targets (build/ re-imports buildTransitive/). -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)build\Nova.PresentationFramework.props" Pack="true" PackagePath="build/" />
+    <None Include="$(MSBuildThisFileDirectory)build\Nova.PresentationFramework.targets" Pack="true" PackagePath="build/" />
+    <None Include="$(MSBuildThisFileDirectory)buildTransitive\Nova.PresentationFramework.props" Pack="true" PackagePath="buildTransitive/" />
+    <None Include="$(MSBuildThisFileDirectory)buildTransitive\Nova.PresentationFramework.targets" Pack="true" PackagePath="buildTransitive/" />
+  </ItemGroup>
+
+  <!--
+    Licenses / notices. PackageLicenseFile=LICENSE (repo MIT) is the package's
+    license; LICENSE.TXT is upstream dotnet/wpf's MIT text (required next to
+    the redistributed patched WPF assemblies); NOTICE carries the LibTessDotNet
+    (SGI-B) attribution and the companion-license inventory.
+  -->
+  <ItemGroup>
+    <None Include="$(_RepoRoot)LICENSE" Pack="true" PackagePath="/" />
+    <None Include="$(_RepoRoot)third_party\dotnet-wpf\LICENSE.TXT" Pack="true" PackagePath="/" />
+    <None Include="$(_RepoRoot)NOTICE" Pack="true" PackagePath="/" />
+    <!-- Bundled Fluent icon font (Apache-2.0 Uno Fluent Icons + MIT WinSymbols3 glyphs;
+         see fonts/LICENSE-uno-fonts.txt / fonts/LICENSE-winsymbols3.txt and NOTICE).
+         NuGet does not flow a bare fonts/ folder; the bundle targets copy it to
+         consumer output. -->
+    <None Include="$(_RepoRoot)fonts\NovaFluentIcons.ttf" Pack="true" PackagePath="fonts/" />
+    <None Include="$(_RepoRoot)fonts\LICENSE-uno-fonts.txt" Pack="true" PackagePath="fonts/" />
+    <None Include="$(_RepoRoot)fonts\LICENSE-winsymbols3.txt" Pack="true" PackagePath="fonts/" />
+  </ItemGroup>
+
+  <!--
+    Per-TFM assembly collection: the copy-local outputs of the project
+    references are the package's lib content — direct AND transitive project
+    outputs land in ReferenceCopyLocalPaths, so the Nova.* closure ships without
+    enumerating it.
+  -->
+  <Target Name="CopyProjectReferencesToPackage" DependsOnTargets="ResolveReferences;NovaDeriveWpfProjects">
+    <!-- The per-TFM pack walk runs with BuildProjectReferences=false; the
+         ref-assembly-producing WPF projects then resolve to their REFERENCE
+         assemblies (never copy-local), so their implementation outputs are
+         resolved directly via GetTargetPath (the _NovaWpfProjects list is
+         derived by NovaDeriveWpfProjects). Everything else flows through the
+         canonical copy-local collection. -->
+    <MSBuild Projects="@(_NovaWpfProjects)"
+             Targets="GetTargetPath"
+             Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework);NovaGetTargetPathOnly=true"
+             BuildInParallel="$(BuildInParallel)">
+      <Output TaskParameter="TargetOutputs" ItemName="_NovaWpfOutput" />
+    </MSBuild>
+
+    <PropertyGroup>
+      <_NovaCopyLocalList>@(ReferenceCopyLocalPaths->WithMetadataValue('ReferenceSourceTarget', 'ProjectReference')->WithMetadataValue('PrivateAssets', 'All')->'%(Identity)', ';')</_NovaCopyLocalList>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <BuildOutputInPackage Include="@(ReferenceCopyLocalPaths
+          ->WithMetadataValue('ReferenceSourceTarget', 'ProjectReference')
+          ->WithMetadataValue('PrivateAssets', 'All'))"
+        Condition="$([System.IO.Path]::GetExtension('%(Identity)')) == '.dll' And !$([System.IO.Path]::GetFileName('%(Identity)').EndsWith('.resources.dll'))" />
+      <!-- The implementation outputs of the reference-assembly-producing WPF
+           projects that the copy-local sweep could not see; skip anything the
+           copy-local collection already covers. -->
+      <BuildOutputInPackage Include="@(_NovaWpfOutput)"
+        Condition="$([System.IO.Path]::GetExtension('%(Identity)')) == '.dll' And !$([System.IO.Path]::GetFileName('%(Identity)').EndsWith('.resources.dll')) And !$([System.String]::Copy('$(_NovaCopyLocalList)').Contains('%(Identity)'))" />
+      <!-- The auto-collection body of _GetBuildOutputFilesWithTfm runs after
+           this hook; its three source groups are filtered here instead: no
+           documentation, no flat-path satellites (the derived satellite pass
+           replaces them), and the pack project's own empty assembly. -->
+      <DocumentationProjectOutputGroupOutput Remove="@(DocumentationProjectOutputGroupOutput)" />
+      <SatelliteDllsProjectOutputGroupOutput Remove="@(SatelliteDllsProjectOutputGroupOutput)" />
+      <BuiltProjectOutputGroupOutput Remove="@(BuiltProjectOutputGroupOutput)"
+        Condition="$([System.IO.Path]::GetFileName('%(BuiltProjectOutputGroupOutput.Identity)')) == 'Nova.PresentationFramework.dll'" />
+    </ItemGroup>
+
+    <!-- Fail fast: the package contract is exactly 36 top-level dlls per TFM
+         (14 WPF + WindowsFormsIntegration + 17 Nova.* + System.Printing etc.).
+         GetTargetPath on an unbuilt project yields nothing and an unbuilt
+         Nova.* project is absent from the copy-local set — either way the
+         count drops below 36 and the pack must fail loudly rather than ship a
+         silently incomplete bundle. Adding a 37th shipping assembly requires
+         bumping this constant on purpose. -->
+    <PropertyGroup>
+      <_NovaWpfProjectCount>@(_NovaWpfProjects->Count())</_NovaWpfProjectCount>
+      <_NovaWpfOutputCount>@(_NovaWpfOutput->Count())</_NovaWpfOutputCount>
+      <_NovaCollectedCount>@(BuildOutputInPackage->Count())</_NovaCollectedCount>
+    </PropertyGroup>
+    <Error Condition="'$(_NovaWpfProjectCount)' != '$(_NovaWpfOutputCount)'"
+      Text="Nova.PresentationFramework pack: $(_NovaWpfProjectCount) referenced WPF projects produced $(_NovaWpfOutputCount) output dlls (unbuilt?). Projects: @(_NovaWpfProjects). Outputs: @(_NovaWpfOutput)" />
+    <Error Condition="'$(_NovaCollectedCount)' != '36'"
+      Text="Nova.PresentationFramework pack: collected $(_NovaCollectedCount) top-level dlls, expected 36 (unbuilt reference?). Collected: @(BuildOutputInPackage)" />
+  </Target>
+
+  <!--
+    Culture satellites of the referenced WPF assemblies. The set is derived:
+    every _NovaWpfProjects member is asked for its SatelliteDllsProjectOutputGroup
+    output; assemblies without satellites return nothing. The flat-path
+    auto-collection is disabled at the source, so this pass is the only satellite
+    source and the culture directory comes from each item's TargetPath segment.
+  -->
+  <Target Name="NovaAddSatellites" DependsOnTargets="NovaDeriveWpfProjects">
+    <MSBuild Projects="@(_NovaWpfProjects)"
+             Targets="SatelliteDllsProjectOutputGroup"
+             Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework);NovaGetSatellitesOnly=true"
+             BuildInParallel="$(BuildInParallel)">
+      <Output TaskParameter="TargetOutputs" ItemName="_NovaSatellites" />
+    </MSBuild>
+    <ItemGroup>
+      <!-- The culture is the first segment of each item's TargetPath. Two
+           group implementations exist: Microsoft.Common.CurrentVersion.targets
+           sets TargetPath=<culture>/<name>.resources.dll plus Culture metadata;
+           the WinFX SDK (Microsoft.WinFX.targets, used by PresentationCore and
+           PresentationUI) sets only TargetPath with a Windows separator. The
+           directory name works for both. -->
+      <TfmSpecificPackageFile Include="@(_NovaSatellites)"
+        Condition="'%(_NovaSatellites.TargetPath)' != ''"
+        PackagePath="lib/$(TargetFramework)/$([System.IO.Path]::GetDirectoryName('%(_NovaSatellites.TargetPath)'))/" />
+    </ItemGroup>
+  </Target>
+
+  <!--
+    Publishing hygiene: the version is derived at pack
+    time as 11.0.0-rc.1.<UTC-stamp>+g<shortsha>, so every content change ships a
+    DISTINCT NuGet version. NuGet caches packages by id+version; a reused version
+    serves stale bits to warm-cache consumers forever (2026-08-21 incident). The
+    numeric prerelease segment (yyyyMMddHHmmssfff UTC) is monotonically increasing
+    and SemVer compares numeric identifiers numerically; the +g<sha> build
+    metadata is preserved in the nuspec and npf-identity.txt for traceability.
+    Packing outside a git worktree is an error. The dirty marker ('.dirty') is
+    appended when the superproject worktree has uncommitted changes (the
+    submodule's dirty tree is the applied patch series by design).
+  -->
+  <Target Name="NovaDerivePackVersion" BeforeTargets="_IntermediatePack" Condition="'$(TargetFramework)' == ''">
+    <PropertyGroup>
+      <_NovaPackStamp>$([System.DateTime]::UtcNow.ToString('yyyyMMddHHmmssfff'))</_NovaPackStamp>
+    </PropertyGroup>
+    <Exec Command="git -C $(_RepoRoot) rev-parse --short HEAD"
+          ConsoleToMSBuild="true"
+          StandardOutputImportance="Low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_NovaGitSha" />
+    </Exec>
+    <Exec Command="git -C $(_RepoRoot) status --porcelain --ignore-submodules=dirty"
+          ConsoleToMSBuild="true"
+          StandardOutputImportance="Low"
+          Condition="'$(_NovaGitSha)' != ''">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_NovaGitStatus" />
+    </Exec>
+    <Error Condition="'$(_NovaGitSha)' == ''"
+           Text="Cannot derive package version: 'git -C $(_RepoRoot) rev-parse --short HEAD' failed. Packing requires a git worktree — the package version carries the commit id for traceability." />
+    <PropertyGroup>
+      <Version>$(Version).$(_NovaPackStamp)+g$(_NovaGitSha)</Version>
+      <Version Condition="'$(_NovaGitStatus)' != ''">$(Version).dirty</Version>
+      <PackageVersion>$(Version)</PackageVersion>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(IntermediateOutputPath)npf-identity.txt"
+                      Lines="Nova.PresentationFramework $(Version)"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <None Include="$(IntermediateOutputPath)npf-identity.txt" Pack="true" PackagePath="/" />
+    </ItemGroup>
+  </Target>
+
+</Project>

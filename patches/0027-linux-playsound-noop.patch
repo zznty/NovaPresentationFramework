@@ -1,0 +1,19 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Application.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Application.cs
+index 02912b7..b204fb1 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Application.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Application.cs
+@@ -2287,6 +2287,14 @@ private void ConfigAppWindowAndRootElement(object root, Uri uri)
+         /// <returns>true if a sound was successfully played</returns>
+         private void PlaySound(string soundName)
+         {
++            if (!OperatingSystem.IsWindows())
++            {
++                // Linux host trap (patches/0027): navigation system sounds come from the
++                // Win32 AppEvents registry scheme + PlaySound; there is no sound host on
++                // Linux. Play nothing — navigation itself must not crash.
++                return;
++            }
++
+             string soundFile = GetSystemSound(soundName);
+ 
+             if (!string.IsNullOrEmpty(soundFile))

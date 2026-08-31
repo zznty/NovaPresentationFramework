@@ -1,0 +1,538 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/Common/Graphics/exports.cs b/src/Microsoft.DotNet.Wpf/src/Common/Graphics/exports.cs
+index 25ca02f3..d9ead26c 100644
+--- a/src/Microsoft.DotNet.Wpf/src/Common/Graphics/exports.cs
++++ b/src/Microsoft.DotNet.Wpf/src/Common/Graphics/exports.cs
+@@ -1,4 +1,4 @@
+-﻿// Licensed to the .NET Foundation under one or more agreements.
++// Licensed to the .NET Foundation under one or more agreements.
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+ //
+@@ -14,6 +14,7 @@
+ 
+ using UnsafeNativeMethods = MS.Win32.PresentationCore.UnsafeNativeMethods;
+ using HRESULT = MS.Internal.HRESULT;
++using Nova.Mil;
+ 
+ /*
+  *
+@@ -109,124 +110,166 @@ internal static unsafe void CopyBytes(byte* pbTo,
+ 
+         private static class UnsafeNativeMethods
+         {
+-            [DllImport(DllImport.MilCore)]
+-            internal static extern /*HRESULT*/ int MilResource_CreateOrAddRefOnChannel(
++            internal static int MilResource_CreateOrAddRefOnChannel(
+                 IntPtr pChannel,
+                 DUCE.ResourceType resourceType,
+-                ref DUCE.ResourceHandle hResource
+-                );
++                ref DUCE.ResourceHandle hResource)
++            {
++                uint handle = (uint)hResource;
++                int hr = DuceExports.CreateOrAddRef(pChannel, (uint)resourceType, ref handle);
++                hResource = new DUCE.ResourceHandle(handle);
++                return hr;
++            }
+ 
+-            [DllImport(DllImport.MilCore)]
+-            internal static extern /*HRESULT*/ int MilResource_DuplicateHandle(
++            internal static int MilResource_DuplicateHandle(
+                 IntPtr pSourceChannel,
+                 DUCE.ResourceHandle original,
+                 IntPtr pTargetChannel,
+-                ref DUCE.ResourceHandle duplicate
+-                );
++                ref DUCE.ResourceHandle duplicate)
++            {
++                uint handle = (uint)duplicate;
++                int hr = DuceExports.DuplicateHandle(pSourceChannel, (uint)original, pTargetChannel, ref handle);
++                duplicate = new DUCE.ResourceHandle(handle);
++                return hr;
++            }
+ 
+-            [DllImport(DllImport.MilCore, EntryPoint = "MilConnection_CreateChannel")]//CASRemoval:
+-            internal static extern int MilConnection_CreateChannel(
++            internal static int MilConnection_CreateChannel(
+                 IntPtr pTransport,
+                 IntPtr hChannel,
+-                out IntPtr channelHandle);
++                out IntPtr channelHandle)
++            {
++                return DuceExports.CreateChannel(pTransport, hChannel, out channelHandle);
++            }
+ 
+-            [DllImport(DllImport.MilCore, EntryPoint = "MilConnection_DestroyChannel")]//CASRemoval:
+-            internal static extern int MilConnection_DestroyChannel(
+-                IntPtr channelHandle);
++            internal static int MilConnection_DestroyChannel(
++                IntPtr channelHandle)
++            {
++                return DuceExports.DestroyChannel(channelHandle);
++            }
+ 
+-            [DllImport(DllImport.MilCore, EntryPoint = "MilChannel_CloseBatch")]//CASRemoval:
+-            internal static extern int MilConnection_CloseBatch(
+-                IntPtr channelHandle);
++            internal static int MilConnection_CloseBatch(
++                IntPtr channelHandle)
++            {
++                return DuceExports.CloseBatch(channelHandle);
++            }
+ 
+-            [DllImport(DllImport.MilCore, EntryPoint = "MilChannel_CommitChannel")]//CASRemoval:
+-            internal static extern int MilConnection_CommitChannel(
+-                IntPtr channelHandle);
++            internal static int MilConnection_CommitChannel(
++                IntPtr channelHandle)
++            {
++                return DuceExports.CommitChannel(channelHandle);
++            }
+ 
+-            [DllImport(DllImport.MilCore)]//CASRemoval:
+-            internal static extern int WgxConnection_SameThreadPresent(
+-                IntPtr pConnection);
++            internal static int WgxConnection_SameThreadPresent(
++                IntPtr pConnection)
++            {
++                return DuceExports.Present(pConnection);
++            }
+ 
+-            [DllImport(DllImport.MilCore, EntryPoint = "MilChannel_GetMarshalType")]
+-            internal static extern int MilChannel_GetMarshalType(IntPtr channelHandle, out ChannelMarshalType marshalType);
++            internal static int MilChannel_GetMarshalType(IntPtr channelHandle, out ChannelMarshalType marshalType)
++            {
++                int hr = DuceExports.GetMarshalType(channelHandle, out int type);
++                marshalType = (ChannelMarshalType)type;
++                return hr;
++            }
+ 
+-            [DllImport (DllImport.MilCore, EntryPoint = "MilResource_SendCommand")]//CASRemoval:
+-            internal static extern unsafe int MilResource_SendCommand(
++            internal static unsafe int MilResource_SendCommand(
+                 byte *pbData,
+                 uint cbSize,
+                 bool sendInSeparateBatch,
+-                IntPtr pChannel);
++                IntPtr pChannel)
++            {
++                return DuceExports.SendCommand(pbData, cbSize, sendInSeparateBatch, pChannel);
++            }
+ 
+-            [DllImport (DllImport.MilCore, EntryPoint = "MilChannel_BeginCommand")]//CASRemoval:
+-            internal static extern unsafe int MilChannel_BeginCommand(
++            internal static unsafe int MilChannel_BeginCommand(
+                 IntPtr pChannel,
+                 byte *pbData,
+                 uint cbSize,
+-                uint cbExtra
+-                );
++                uint cbExtra)
++            {
++                return DuceExports.BeginCommand(pChannel, pbData, cbSize, cbExtra);
++            }
+ 
+-            [DllImport (DllImport.MilCore, EntryPoint = "MilChannel_AppendCommandData")]//CASRemoval:
+-            internal static extern unsafe int MilChannel_AppendCommandData(
++            internal static unsafe int MilChannel_AppendCommandData(
+                 IntPtr pChannel,
+                 byte *pbData,
+-                uint cbSize
+-                );
++                uint cbSize)
++            {
++                return DuceExports.AppendCommandData(pChannel, pbData, cbSize);
++            }
+ 
+-            [DllImport (DllImport.MilCore, EntryPoint = "MilChannel_EndCommand")]//CASRemoval:
+-            internal static extern unsafe int MilChannel_EndCommand(
+-                IntPtr pChannel);
++            internal static unsafe int MilChannel_EndCommand(
++                IntPtr pChannel)
++            {
++                return DuceExports.EndCommand(pChannel);
++            }
+ 
+-            [DllImport (DllImport.MilCore, EntryPoint = "MilResource_SendCommandMedia")]//CASRemoval:
+-            internal static extern unsafe int MilResource_SendCommandMedia(
++            internal static unsafe int MilResource_SendCommandMedia(
+                 ResourceHandle handle,
+                 SafeMediaHandle pMedia,
+                 IntPtr pChannel,
+-                bool  notifyUceDirect
+-                );
++                bool  notifyUceDirect)
++            {
++                nint media = pMedia is null ? 0 : pMedia.DangerousGetHandle();
++                return DuceExports.SendCommandMedia((uint)handle, media, pChannel, notifyUceDirect);
++            }
+ 
+-            [DllImport (DllImport.MilCore, EntryPoint = "MilResource_SendCommandBitmapSource")]//CASRemoval:
+-            internal static extern unsafe int MilResource_SendCommandBitmapSource(
++            internal static unsafe int MilResource_SendCommandBitmapSource(
+                 ResourceHandle handle,
+                 BitmapSourceSafeMILHandle /* IWICBitmapSource */ pBitmapSource,
+-                IntPtr pChannel);
++                IntPtr pChannel)
++            {
++                nint bitmap = pBitmapSource is null ? 0 : pBitmapSource.DangerousGetHandle();
++                return DuceExports.SendCommandBitmapSource((uint)handle, bitmap, pChannel);
++            }
+ 
+-            [DllImport(DllImport.MilCore, EntryPoint = "MilResource_ReleaseOnChannel")]//CASRemoval:
+-            internal static extern /*HRESULT*/ int MilResource_ReleaseOnChannel(
++            internal static int MilResource_ReleaseOnChannel(
+                 IntPtr pChannel,
+                 DUCE.ResourceHandle hResource,
+-                out int deleted
+-                );
++                out int deleted)
++            {
++                return DuceExports.Release(pChannel, (uint)hResource, out deleted);
++            }
+ 
+-            [DllImport(DllImport.MilCore)]
+-            internal static extern int MilChannel_SetNotificationWindow(
++            internal static int MilChannel_SetNotificationWindow(
+                 IntPtr pChannel,
+                 IntPtr hwnd,
+-                WindowMessage message
+-                );
++                WindowMessage message)
++            {
++                return DuceExports.SetNotificationWindow(pChannel, hwnd, (int)message);
++            }
+ 
+-            [DllImport(DllImport.MilCore)]
+-            internal static extern int MilComposition_WaitForNextMessage(
++            internal static int MilComposition_WaitForNextMessage(
+                 IntPtr pChannel,
+                 int nCount,
+                 IntPtr[] handles,
+                 int bWaitAll,
+                 UInt32 waitTimeout,
+-                out int waitReturn
+-                );
++                out int waitReturn)
++            {
++                return DuceExports.WaitForNextMessage(pChannel, nCount, handles, bWaitAll, waitTimeout, out waitReturn);
++            }
+ 
+-            [DllImport(DllImport.MilCore)]
+-            internal static extern int MilComposition_PeekNextMessage(
++            internal static unsafe int MilComposition_PeekNextMessage(
+                 IntPtr pChannel,
+                 out MilMessage.Message message,
+                 /* size_t */ IntPtr messageSize,
+-                out int messageRetrieved
+-                );
++                out int messageRetrieved)
++            {
++                message = default;
++                fixed (MilMessage.Message* pMessage = &message)
++                {
++                    return DuceExports.PeekNextMessage(pChannel, pMessage, (nuint)(nint)messageSize, out messageRetrieved);
++                }
++            }
+ 
+-            [DllImport(DllImport.MilCore, EntryPoint = "MilResource_GetRefCountOnChannel")]
+-            internal static extern /*HRESULT*/ int MilResource_GetRefCountOnChannel(
++            internal static int MilResource_GetRefCountOnChannel(
+                 IntPtr pChannel,
+                 DUCE.ResourceHandle hResource,
+-                out uint refCount
+-                );
++                out uint refCount)
++            {
++                return DuceExports.GetRefCount(pChannel, (uint)hResource, out refCount);
++            }
+         }
+ 
+         /// <summary>
+@@ -330,6 +373,13 @@ internal sealed partial class Channel
+ 
+             private IntPtr _pConnection;
+ 
++            /// <summary>
++            /// The native channel handle. Exposed to the managed host (Nova.SdlSource) so
++            /// commits on this channel can be routed to the owning composition frame's
++            /// slave graph when multiple frames are alive.
++            /// </summary>
++            internal IntPtr ChannelHandle => _hChannel;
++
+             /// <summary>
+             /// Creates a channel and associates it with channel group (partition).
+             /// New create channel will belong to the same partition as the given referenceChannel.
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/DWriteLoader.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/DWriteLoader.cs
+index a745123c..7bdcd131 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/DWriteLoader.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/DWriteLoader.cs
+@@ -1,7 +1,6 @@
+ // Licensed to the .NET Foundation under one or more agreements.
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+-using System.ComponentModel;
+ using System.Runtime.InteropServices;
+ 
+ namespace MS.Internal.Text.TextInterface
+@@ -13,17 +12,10 @@ internal static unsafe class DWriteLoader
+ 
+         internal static void LoadDWrite()
+         {
+-            // We load dwrite here because it's cleanup logic is different from the other native dlls
+-            // and don't want to abstract that
+-            _dwrite = LoadDWriteLibraryAndGetProcAddress(out delegate* unmanaged<int, void*, void*, int> dwriteCreateFactory);
+-
+-            if (_dwrite == IntPtr.Zero)
+-                throw new DllNotFoundException("dwrite.dll", new Win32Exception());
+-
+-            if (dwriteCreateFactory == null)
+-                throw new InvalidOperationException();
+-
+-            _dwriteCreateFactory = dwriteCreateFactory;
++            // Product path: Factory / FontFace / analyzer bodies are managed
++            // (Nova.Text). Do not NativeLibrary.Load("dwrite.dll").
++            _dwrite = IntPtr.Zero;
++            _dwriteCreateFactory = null;
+         }
+ 
+         internal static void UnloadDWrite()
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/ModuleInitializer.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/ModuleInitializer.cs
+index fe583199..412de04a 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/ModuleInitializer.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/ModuleInitializer.cs
+@@ -3,7 +3,6 @@
+ 
+ using System.Reflection;
+ using System.Runtime.CompilerServices;
+-using System.Runtime.InteropServices;
+ using MS.Internal.Text.TextInterface;
+ 
+ internal static class ModuleInitializer
+@@ -28,8 +27,6 @@ public static void Initialize()
+         {
+             DWriteLoader.UnloadDWrite();
+         };
+-
+-        MS.Internal.NativeWPFDLLLoader.LoadDwrite();
+     }
+ #pragma warning restore CA2255
+ 
+@@ -56,6 +53,7 @@ private static void IsProcessDpiAware()
+         // It will ignore the SetProcessDPIAware API call.
+     }
+ 
+-    [DllImport("user32.dll", EntryPoint = "SetProcessDPIAware")]
+-    private static extern void SetProcessDPIAware_Internal();
++    private static void SetProcessDPIAware_Internal()
++    {
++    }
+ }
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/OtherAssemblyAttrs.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/OtherAssemblyAttrs.cs
+index 7cf2993f..9c2ad08f 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/OtherAssemblyAttrs.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/OtherAssemblyAttrs.cs
+@@ -17,6 +17,7 @@
+ [assembly: InternalsVisibleTo(BuildInfo.SystemWindowsControlsRibbon)]
+ [assembly: InternalsVisibleTo(BuildInfo.WindowsFormsIntegration)]
+ [assembly: InternalsVisibleTo($"PresentationCore.Tests, PublicKey={BuildInfo.WCP_PUBLIC_KEY_STRING}")]
++[assembly: InternalsVisibleTo($"Nova.SdlSource, PublicKey={BuildInfo.WCP_PUBLIC_KEY_STRING}")]
+ [assembly: TypeForwardedTo(typeof(System.Windows.Markup.IUriContext))]
+ [assembly: TypeForwardedTo(typeof(System.Windows.Media.TextFormattingMode))]
+ [assembly: TypeForwardedTo(typeof(System.Windows.Input.ICommand))]
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj b/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj
+index bfbade2e..bb001358 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj
+@@ -1395,9 +1395,7 @@
+   <ItemGroup>
+     <!-- required for internals access -->
+     <ProjectReference Include="$(WpfSourceDir)WindowsBase\WindowsBase.csproj" />
+-    <ProjectReference Include="$(WpfSourceDir)DirectWriteForwarder\DirectWriteForwarder.vcxproj">
+-      <UndefineProperties>TargetFramework;TargetFrameworks</UndefineProperties>
+-    </ProjectReference>
++    <ProjectReference Include="..\..\..\..\..\..\src\Nova.Mil\Nova.Mil.csproj" />
+     <ProjectReference Include="$(WpfSourceDir)System.Xaml\System.Xaml.csproj" />
+     <ProjectReference Include="$(WpfSourceDir)System.Windows.Input.Manipulations\System.Windows.Input.Manipulations.csproj" />
+     <ProjectReference Include="$(WpfSourceDir)System.Windows.Primitives\System.Windows.Primitives.csproj" />
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Composition.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Composition.cs
+index 93753c71..0c13afe5 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Composition.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Composition.cs
+@@ -1,8 +1,9 @@
+-﻿// Licensed to the .NET Foundation under one or more agreements.
++// Licensed to the .NET Foundation under one or more agreements.
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+ using System.Windows.Media.Media3D;
+ using System.Runtime.InteropServices;
++using Nova.Mil;
+ 
+ namespace System.Windows.Media.Composition
+ {
+@@ -190,10 +191,11 @@ internal static UInt32 BooleanToUInt32(Boolean v)
+ 
+     internal static partial class MilCoreApi
+     {
+-        [DllImport(DllImport.MilCore)]
+-        internal static extern int MilComposition_SyncFlush(
+-            IntPtr pChannel
+-            );
++        internal static int MilComposition_SyncFlush(
++            IntPtr pChannel)
++        {
++            return DuceExports.SyncFlush(pChannel);
++        }
+ 
+         [DllImport(DllImport.MilCore)]
+         internal static extern unsafe int MilUtility_GetPointAtLengthFraction(
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/SafeNativeMethodsMilCoreApi.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/SafeNativeMethodsMilCoreApi.cs
+index 32d765b6..7a1bb3cc 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/SafeNativeMethodsMilCoreApi.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/SafeNativeMethodsMilCoreApi.cs
+@@ -1,7 +1,7 @@
+ // Licensed to the .NET Foundation under one or more agreements.
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+-using System.Runtime.InteropServices;
++using Nova.Mil;
+ 
+ //
+ //  ABOUT THIS FILE:
+@@ -33,14 +33,20 @@ internal static long GetNextPerfElementId()
+ 
+        private static partial class SafeNativeMethodsPrivate
+        {
+-            [DllImport(DllImport.MilCore)]
+-            internal static extern int MilCompositionEngine_InitializePartitionManager(int nPriority);
+-
+-            [DllImport(DllImport.MilCore)]
+-            internal static extern int MilCompositionEngine_DeinitializePartitionManager();
+-
+-            [DllImport(DllImport.MilCore)]
+-            internal static extern long GetNextPerfElementId();
++            internal static int MilCompositionEngine_InitializePartitionManager(int nPriority)
++            {
++                return DuceExports.InitializePartitionManager(nPriority);
++            }
++
++            internal static int MilCompositionEngine_DeinitializePartitionManager()
++            {
++                return DuceExports.DeinitializePartitionManager();
++            }
++
++            internal static long GetNextPerfElementId()
++            {
++                return DuceExports.NextPerfElementId();
++            }
+        }
+     }
+ }
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/UnsafeNativeMethodsMilCoreApi.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/UnsafeNativeMethodsMilCoreApi.cs
+index 3b296468..f7309157 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/UnsafeNativeMethodsMilCoreApi.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/UnsafeNativeMethodsMilCoreApi.cs
+@@ -1,4 +1,4 @@
+-﻿// Licensed to the .NET Foundation under one or more agreements.
++// Licensed to the .NET Foundation under one or more agreements.
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+ //  ABOUT THIS FILE:
+@@ -15,6 +15,7 @@
+ using System.Windows.Media;
+ using System.Windows.Media.Imaging;
+ using System.Windows;
++using Nova.Mil;
+ 
+ namespace MS.Win32.PresentationCore
+ {
+@@ -22,33 +23,48 @@ internal static partial class UnsafeNativeMethods
+     {
+         internal static class MilCoreApi
+         {
+-            [DllImport(DllImport.MilCore, EntryPoint = "MilCompositionEngine_EnterCompositionEngineLock")]
+-            internal static extern void EnterCompositionEngineLock();
++            internal static void EnterCompositionEngineLock()
++            {
++                DuceExports.EnterCompositionLock();
++            }
+ 
+-            [DllImport(DllImport.MilCore, EntryPoint = "MilCompositionEngine_ExitCompositionEngineLock")]
+-            internal static extern void ExitCompositionEngineLock();
++            internal static void ExitCompositionEngineLock()
++            {
++                DuceExports.ExitCompositionLock();
++            }
+ 
+-            [DllImport(DllImport.MilCore, EntryPoint = "MilCompositionEngine_EnterMediaSystemLock")]
+-            internal static extern void EnterMediaSystemLock();
++            internal static void EnterMediaSystemLock()
++            {
++                DuceExports.EnterMediaLock();
++            }
+ 
+-            [DllImport(DllImport.MilCore, EntryPoint = "MilCompositionEngine_ExitMediaSystemLock")]
+-            internal static extern void ExitMediaSystemLock();
++            internal static void ExitMediaSystemLock()
++            {
++                DuceExports.ExitMediaLock();
++            }
+ 
+-            [DllImport(DllImport.MilCore)]
+-            internal static extern int MilVersionCheck(
+-                uint uiCallerMilSdkVersion
+-             );
+- 
+-            [DllImport(DllImport.MilCore)]
+-            internal static extern bool WgxConnection_ShouldForceSoftwareForGraphicsStreamClient();
++            internal static int MilVersionCheck(
++                uint uiCallerMilSdkVersion)
++            {
++                return DuceExports.VersionCheck(uiCallerMilSdkVersion);
++            }
+ 
+-            [DllImport(DllImport.MilCore)]
+-            internal static extern int WgxConnection_Create(
+-            	bool requestSynchronousTransport,
+-				out IntPtr ppConnection);
++            internal static bool WgxConnection_ShouldForceSoftwareForGraphicsStreamClient()
++            {
++                return DuceExports.ShouldForceSoftware();
++            }
+ 
+-            [DllImport(DllImport.MilCore)]
+-            internal static extern int WgxConnection_Disconnect(IntPtr pTranspManager);
++            internal static int WgxConnection_Create(
++                bool requestSynchronousTransport,
++                out IntPtr ppConnection)
++            {
++                return DuceExports.CreateConnection(requestSynchronousTransport, out ppConnection);
++            }
++
++            internal static int WgxConnection_Disconnect(IntPtr pTranspManager)
++            {
++                return DuceExports.DisconnectConnection(pTranspManager);
++            }
+ 
+             [DllImport(DllImport.MilCore)]
+             internal static extern int /* HRESULT */ MILCreateStreamFromStreamDescriptor(ref System.Windows.Media.StreamDescriptor pSD, out IntPtr ppStream);
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/PresentationFramework.csproj b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/PresentationFramework.csproj
+index b1b8161f..f416afd1 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/PresentationFramework.csproj
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/PresentationFramework.csproj
+@@ -1,4 +1,4 @@
+-﻿<Project>
++<Project>
+   <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+   <PropertyGroup>
+     <DefineConstants>$(DefineConstants);FRAMEWORK_NATIVEMETHODS;COMMONDPS;PRESENTATIONFRAMEWORK_ONLY;PRESENTATIONFRAMEWORK;RIBBON_IN_FRAMEWORK</DefineConstants>
+@@ -1382,9 +1382,6 @@
+ 
+   <ItemGroup>
+     <ProjectReference Include="$(WpfSourceDir)PresentationCore\PresentationCore.csproj" />
+-    <ProjectReference Include="$(WpfSourceDir)DirectWriteForwarder\DirectWriteForwarder.vcxproj">
+-      <UndefineProperties>TargetFramework;TargetFrameworks</UndefineProperties>
+-    </ProjectReference>
+     <ProjectReference Include="$(WpfSourceDir)System.Xaml\System.Xaml.csproj" />
+     <ProjectReference Include="$(WpfSourceDir)WindowsBase\WindowsBase.csproj" />
+     <ProjectReference Include="$(WpfSourceDir)UIAutomation\UIAutomationTypes\UIAutomationTypes.csproj" />

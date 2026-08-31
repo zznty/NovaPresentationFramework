@@ -1,0 +1,180 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/clipboard.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/clipboard.cs
+index b7a5f4d..71c4b71 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/clipboard.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/clipboard.cs
+@@ -1,4 +1,4 @@
+-﻿// Licensed to the .NET Foundation under one or more agreements.
++// Licensed to the .NET Foundation under one or more agreements.
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+ #nullable enable
+@@ -128,6 +128,11 @@
+     /// </summary>
+     public static StringCollection GetFileDropList()
+     {
++        if (!OperatingSystem.IsWindows())
++        {
++            return GetFileDropListLinux();
++        }
++
+         StringCollection result = [];
+ 
+         if (GetTypedDataIfAvailable<string[]?>(DataFormatNames.FileDrop) is string[] strings)
+@@ -138,10 +143,68 @@
+         return result;
+     }
+ 
++    // Linux host (patch 0049): the file list travels as the XDG "text/uri-list" mime
++    // (file:// URIs, CRLF separated) through the SDL clipboard.
++    private static StringCollection GetFileDropListLinux()
++    {
++        StringCollection result = [];
++
++        byte[]? uriList = Nova.Sdl.SdlHost.GetClipboardData("text/uri-list");
++        if (uriList is null)
++        {
++            return result;
++        }
++
++        string text = System.Text.Encoding.UTF8.GetString(uriList);
++        foreach (string line in text.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
++        {
++            if (Uri.TryCreate(line.Trim(), UriKind.Absolute, out Uri? uri) && uri.IsFile)
++            {
++                result.Add(uri.LocalPath);
++            }
++        }
++
++        return result;
++    }
++
+     /// <summary>
+     ///  Get the image from Clipboard.
+     /// </summary>
+-    public static BitmapSource? GetImage() => GetTypedDataIfAvailable<BitmapSource>(DataFormats.Bitmap);
++    public static BitmapSource? GetImage()
++    {
++        if (!OperatingSystem.IsWindows())
++        {
++            return GetImageLinux();
++        }
++
++        return GetTypedDataIfAvailable<BitmapSource>(DataFormats.Bitmap);
++    }
++
++    // Linux host (patch 0049): the image travels as PNG through the SDL clipboard's
++    // "image/png" mime type.
++    private static BitmapSource? GetImageLinux()
++    {
++        byte[]? png = Nova.Sdl.SdlHost.GetClipboardData("image/png");
++        if (png is null)
++        {
++            return null;
++        }
++
++        if (Nova.Imaging.PngCodec.Decode(png) is not { } decoded)
++        {
++            return null;
++        }
++
++        return BitmapSource.Create(
++            decoded.Width,
++            decoded.Height,
++            96,
++            96,
++            System.Windows.Media.PixelFormats.Bgra32,
++            palette: null,
++            decoded.Bgra32,
++            decoded.Width * 4);
++    }
+ 
+     /// <summary>
+     ///  Get text from Clipboard.
+@@ -203,12 +266,29 @@
+     {
+         if (!OperatingSystem.IsWindows())
+         {
+-            return; // file-drop payloads have no SDL clipboard form.
++            SetFileDropListLinux(fileDropList);
++            return;
+         }
+ 
+         SetFileDropListCore(fileDropList);
+     }
+ 
++    // Linux host (patch 0049): the file list travels as the XDG "text/uri-list" mime
++    // (file:// URIs, CRLF separated) through the SDL clipboard.
++    private static void SetFileDropListLinux(StringCollection fileDropList)
++    {
++        System.Text.StringBuilder uriList = new();
++        foreach (string path in fileDropList)
++        {
++            uriList.Append(new Uri(Path.GetFullPath(path)).AbsoluteUri).Append("\r\n");
++        }
++
++        Nova.Sdl.SdlHost.SetClipboardData(new Dictionary<string, byte[]>
++        {
++            ["text/uri-list"] = System.Text.Encoding.UTF8.GetBytes(uriList.ToString())
++        });
++    }
++
+     private static void SetFileDropListCore(StringCollection fileDropList)
+     {
+         ClipboardCore.SetFileDropList(fileDropList);
+@@ -220,9 +300,29 @@
+     public static void SetImage(BitmapSource image)
+     {
+         ArgumentNullException.ThrowIfNull(image);
++        if (!OperatingSystem.IsWindows())
++        {
++            SetImageLinux(image);
++            return;
++        }
++
+         SetDataInternal(DataFormats.Bitmap, image);
+     }
+ 
++    // Linux host (patch 0049): the image travels as PNG through the SDL clipboard's
++    // "image/png" mime type.
++    private static void SetImageLinux(BitmapSource image)
++    {
++        BitmapSource bgra = image.Format == System.Windows.Media.PixelFormats.Bgra32
++            ? image
++            : new FormatConvertedBitmap(image, System.Windows.Media.PixelFormats.Bgra32, null, 0);
++        int stride = bgra.PixelWidth * 4;
++        byte[] pixels = new byte[stride * bgra.PixelHeight];
++        bgra.CopyPixels(pixels, stride, 0);
++        byte[] png = Nova.Imaging.PngCodec.EncodeBgra32(bgra.PixelWidth, bgra.PixelHeight, pixels);
++        Nova.Sdl.SdlHost.SetClipboardData(new Dictionary<string, byte[]> { ["image/png"] = png });
++    }
++
+     /// <summary>
+     ///  Set the text data to Clipboard.
+     /// </summary>
+@@ -348,8 +448,24 @@
+     {
+         if (!OperatingSystem.IsWindows())
+         {
+-            return (format == DataFormats.UnicodeText || format == DataFormats.Text)
+-                && Nova.Sdl.SdlHost.GetClipboardText().Length > 0;
++            // The OLE DataObject has no Linux host; probe the SDL clipboard mimes
++            // that the Linux branches of this class write and read.
++            if (format == DataFormats.UnicodeText || format == DataFormats.Text)
++            {
++                return Nova.Sdl.SdlHost.GetClipboardText().Length > 0;
++            }
++
++            if (format == DataFormats.Bitmap)
++            {
++                return Nova.Sdl.SdlHost.HasClipboardData("image/png");
++            }
++
++            if (format == DataFormats.FileDrop)
++            {
++                return Nova.Sdl.SdlHost.HasClipboardData("text/uri-list");
++            }
++
++            return false;
+         }
+ 
+         return GetDataObject() is { } dataObject && dataObject.GetDataPresent(format, IsDataFormatAutoConvert(format));

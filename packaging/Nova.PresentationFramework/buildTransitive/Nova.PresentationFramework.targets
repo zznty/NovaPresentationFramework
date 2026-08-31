@@ -1,0 +1,69 @@
+<Project>
+
+  <!--
+    Nova.PresentationFramework buildTransitive targets. Wires the stock SDK's
+    Microsoft.WinFX.targets into the consumer build at the correct point
+    (AfterMicrosoftNETSdkTargets is imported as the very last statement of
+    Microsoft.NET.Sdk.targets — exactly where the real WindowsDesktop SDK
+    injects itself) and removes the framework-provided WindowsBase/System.Xaml
+    facades so the patched v11.0.0.0 assemblies from lib/ win.
+
+    Importing WinFX through $(AfterMicrosoftNETSdkTargets) is REQUIRED: a plain
+    <Import> in the project body is overwritten by
+    Microsoft.Common.CurrentVersion.targets, which REASSIGNS $(CompileDependsOn)
+    from scratch and silently drops WinFX's _AfterCompileWinFXInternal
+    (the target that runs SatelliteResourceGeneration / MarkupCompilePass2).
+  -->
+  <PropertyGroup>
+    <NovaPresentationFrameworkTargetsImported>true</NovaPresentationFrameworkTargetsImported>
+    <AfterMicrosoftNETSdkTargets>
+      $(AfterMicrosoftNETSdkTargets);
+      $(MSBuildSDKsPath)/Microsoft.NET.Sdk.WindowsDesktop/targets/Microsoft.WinFX.targets
+    </AfterMicrosoftNETSdkTargets>
+  </PropertyGroup>
+
+  <!--
+    The .NET targeting pack ships a 16KB WindowsBase facade (v4.0.0.0,
+    type-forwards only) inside Microsoft.NETCore.App.Ref. The patched
+    WindowsBase (v11.0.0.0) from lib/ must be the one referenced and loaded.
+    Remove the framework facade before _HandlePackageFileConflicts resolves
+    package-vs-framework conflicts (which would otherwise prefer the facade).
+    System.Xaml is excluded defensively: not in the net11.0 targeting pack
+    today, but harmless to keep parity with the repo's own samples.
+  -->
+  <ItemGroup>
+    <_NovaDefaultReferenceExclusion Include="WindowsBase;System.Xaml" />
+  </ItemGroup>
+
+  <!--
+    The bundled Fluent icon font (fonts/NovaFluentIcons.ttf + its two license texts)
+    must land in the consumer's output so the app can register it at runtime via
+    fontconfig (Nova.FontConfig.FontConfigLibrary.RegisterAppFont). NuGet only flows
+    lib/ build/ buildTransitive/ tools/ runtimes/ etc. into the consumer — a plain
+    fonts/ folder in the nupkg is NOT copied, so copy it here explicitly.
+  -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)..\fonts\NovaFluentIcons.ttf"
+          Link="fonts\NovaFluentIcons.ttf"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(MSBuildThisFileDirectory)..\fonts\LICENSE-uno-fonts.txt"
+          Link="fonts\LICENSE-uno-fonts.txt"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(MSBuildThisFileDirectory)..\fonts\LICENSE-winsymbols3.txt"
+          Link="fonts\LICENSE-winsymbols3.txt"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="NovaRemoveFrameworkWpfFacades"
+          AfterTargets="ResolveTargetingPackAssets"
+          BeforeTargets="_HandlePackageFileConflicts;ResolveAssemblyReferences">
+    <ItemGroup>
+      <_NovaReferenceExclusion Include="@(_NovaDefaultReferenceExclusion)">
+        <AssemblyName>%(_NovaDefaultReferenceExclusion.Identity)</AssemblyName>
+        <ExternallyResolved>true</ExternallyResolved>
+      </_NovaReferenceExclusion>
+      <Reference Remove="@(_NovaReferenceExclusion)" MatchOnMetadata="AssemblyName;ExternallyResolved" />
+    </ItemGroup>
+  </Target>
+
+</Project>

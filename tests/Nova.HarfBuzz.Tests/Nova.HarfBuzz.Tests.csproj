@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Nova.FontConfig\Nova.FontConfig.csproj" />
+    <ProjectReference Include="..\..\src\Nova.HarfBuzz\Nova.HarfBuzz.csproj" />
+  </ItemGroup>
+</Project>

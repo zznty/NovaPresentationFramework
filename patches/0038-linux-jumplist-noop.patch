@@ -1,0 +1,32 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Shell/JumpList.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Shell/JumpList.cs
+index 7a444fb..b2c37bc 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Shell/JumpList.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Shell/JumpList.cs
+@@ -126,6 +126,13 @@ static JumpList()
+         public static void AddToRecentCategory(string itemPath)
+         {
+             Verify.FileExists(itemPath, "itemPath");
++            if (!OperatingSystem.IsWindows())
++            {
++                // No JumpList/recent-docs surface on the SDL runtime (shell32 has no
++                // Linux host); the request is validated then dropped.
++                return;
++            }
++
+             itemPath = Path.GetFullPath(itemPath);
+             NativeMethods2.SHAddToRecentDocs(itemPath);
+         }
+@@ -419,6 +426,13 @@ public void Apply()
+             // After this attempting to use ISupportInitialize is invalid.
+             _initializing = false;
+ 
++            if (!OperatingSystem.IsWindows())
++            {
++                // No JumpList surface on the SDL runtime; the shell32 link machinery
++                // has no Linux host.
++                return;
++            }
++
+             ApplyList();
+         }
+ 

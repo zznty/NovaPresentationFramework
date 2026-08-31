@@ -1,0 +1,98 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Shell/WindowChromeWorker.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Shell/WindowChromeWorker.cs
+index b581edd..6ff44e0 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Shell/WindowChromeWorker.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Shell/WindowChromeWorker.cs
+@@ -219,6 +219,20 @@ private void _OnWindowPropertyChangedThatRequiresTemplateFixup(object sender, Ev
+ 
+         private void _ApplyNewCustomChrome()
+         {
++            if (!OperatingSystem.IsWindows())
++            {
++                // Route the chrome geometry into the SDL hit-test machinery: the
++                // window becomes borderless and the resolver classifies each point as
++                // a drag region, a resize edge/corner or the client area — the
++                // compositor performs the move/resize natively.
++                if (PresentationSource.FromVisual(_window) is Nova.SdlSource.SdlPresentationSource source)
++                {
++                    source.ConfigureChrome(_chromeInfo == null ? null : ResolveChromeRegion);
++                }
++
++                return;
++            }
++
+             if (_hwnd == IntPtr.Zero || _hwndSource.IsDisposed)
+             {
+                 // Not yet hooked.
+@@ -1011,6 +1025,72 @@ private void _ExtendGlassFrame()
+             { HT.BOTTOMLEFT, HT.BOTTOM,  HT.BOTTOMRIGHT },
+         };
+ 
++        /// <summary>
++        /// The SDL-side equivalent of <see cref="_HitTestNca"/> plus the per-element
++        /// chrome overrides: the point is window-local logical coordinates.
++        /// </summary>
++        private Nova.SdlSource.ChromeHitTestRegion ResolveChromeRegion(System.Windows.Point point)
++        {
++            if (_chromeInfo == null)
++            {
++                return Nova.SdlSource.ChromeHitTestRegion.Normal;
++            }
++
++            // The per-element opt-outs and the resize-grip direction win over the bands.
++            IInputElement inputElement = _window.InputHitTest(point);
++            if (inputElement != null)
++            {
++                if (WindowChrome.GetIsHitTestVisibleInChrome(inputElement))
++                {
++                    return Nova.SdlSource.ChromeHitTestRegion.Normal;
++                }
++
++                ResizeGripDirection direction = WindowChrome.GetResizeGripDirection(inputElement);
++                if (direction != ResizeGripDirection.None)
++                {
++                    return MapGrip(direction, _window.FlowDirection == FlowDirection.RightToLeft);
++                }
++            }
++
++            Thickness border = _chromeInfo.ResizeBorderThickness;
++            double captionHeight = _chromeInfo.CaptionHeight;
++            double width = _window.ActualWidth;
++            double height = _window.ActualHeight;
++
++            bool topBand = point.Y < border.Top;
++            bool bottomBand = point.Y >= height - border.Bottom;
++            bool leftBand = point.X < border.Left;
++            bool rightBand = point.X >= width - border.Right;
++            bool captionBand = point.Y >= border.Top && point.Y < border.Top + captionHeight;
++
++            if (topBand && leftBand) return Nova.SdlSource.ChromeHitTestRegion.ResizeTopLeft;
++            if (topBand && rightBand) return Nova.SdlSource.ChromeHitTestRegion.ResizeTopRight;
++            if (bottomBand && leftBand) return Nova.SdlSource.ChromeHitTestRegion.ResizeBottomLeft;
++            if (bottomBand && rightBand) return Nova.SdlSource.ChromeHitTestRegion.ResizeBottomRight;
++            if (topBand) return Nova.SdlSource.ChromeHitTestRegion.ResizeTop;
++            if (bottomBand) return Nova.SdlSource.ChromeHitTestRegion.ResizeBottom;
++            if (leftBand) return Nova.SdlSource.ChromeHitTestRegion.ResizeLeft;
++            if (rightBand) return Nova.SdlSource.ChromeHitTestRegion.ResizeRight;
++            if (captionBand) return Nova.SdlSource.ChromeHitTestRegion.Draggable;
++            return Nova.SdlSource.ChromeHitTestRegion.Normal;
++        }
++
++        private static Nova.SdlSource.ChromeHitTestRegion MapGrip(ResizeGripDirection direction, bool compliment)
++        {
++            return direction switch
++            {
++                ResizeGripDirection.Bottom => Nova.SdlSource.ChromeHitTestRegion.ResizeBottom,
++                ResizeGripDirection.BottomLeft => compliment ? Nova.SdlSource.ChromeHitTestRegion.ResizeBottomRight : Nova.SdlSource.ChromeHitTestRegion.ResizeBottomLeft,
++                ResizeGripDirection.BottomRight => compliment ? Nova.SdlSource.ChromeHitTestRegion.ResizeBottomLeft : Nova.SdlSource.ChromeHitTestRegion.ResizeBottomRight,
++                ResizeGripDirection.Left => compliment ? Nova.SdlSource.ChromeHitTestRegion.ResizeRight : Nova.SdlSource.ChromeHitTestRegion.ResizeLeft,
++                ResizeGripDirection.Right => compliment ? Nova.SdlSource.ChromeHitTestRegion.ResizeLeft : Nova.SdlSource.ChromeHitTestRegion.ResizeRight,
++                ResizeGripDirection.Top => Nova.SdlSource.ChromeHitTestRegion.ResizeTop,
++                ResizeGripDirection.TopLeft => compliment ? Nova.SdlSource.ChromeHitTestRegion.ResizeTopRight : Nova.SdlSource.ChromeHitTestRegion.ResizeTopLeft,
++                ResizeGripDirection.TopRight => compliment ? Nova.SdlSource.ChromeHitTestRegion.ResizeTopLeft : Nova.SdlSource.ChromeHitTestRegion.ResizeTopRight,
++                _ => Nova.SdlSource.ChromeHitTestRegion.Normal,
++            };
++        }
++
+         private HT _HitTestNca(Rect windowPosition, Point mousePosition)
+         {
+             // Determine if hit test is for resizing, default middle (1,1).

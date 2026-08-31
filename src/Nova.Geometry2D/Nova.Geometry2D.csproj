@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>CPU path flatten, tessellate, and hit-test for MIL geometry.</Description>
+    <RootNamespace>Nova.Geometry2D</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Nova.Geometry\Nova.Geometry.csproj" />
+  </ItemGroup>
+</Project>

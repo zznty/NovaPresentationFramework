@@ -1,0 +1,43 @@
+diff --git a/Directory.Build.props b/Directory.Build.props
+index b6d9820..b74d4ac 100644
+--- a/Directory.Build.props
++++ b/Directory.Build.props
+@@ -4,8 +4,9 @@
+     <RepositoryName>wpf</RepositoryName>
+     <PackageProjectUrl>https://github.com/dotnet/wpf</PackageProjectUrl>
+     <WindowsDesktopARM64Support>true</WindowsDesktopARM64Support>
+-    <TargetFramework>net11.0</TargetFramework>
+-    <TargetFrameworkVersion>11.0</TargetFrameworkVersion>
++    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
++    <TargetFrameworkVersion Condition="'$(TargetFramework)' == 'net10.0'">10.0</TargetFrameworkVersion>
++    <TargetFrameworkVersion Condition="'$(TargetFramework)' == 'net11.0'">11.0</TargetFrameworkVersion>
+     <BuildWithNetFrameworkHostedCompiler>true</BuildWithNetFrameworkHostedCompiler>
+     <PublishWindowsPdb>false</PublishWindowsPdb>
+     <TestRunnerName>XUnitV3</TestRunnerName>
+@@ -45,4 +46,26 @@
+     <PerlCommand>/usr/bin/perl</PerlCommand>
+   </PropertyGroup>
+ 
++  <!--
++    net10.0 leg of the Linux multi-TFM host (net10.0;net11.0):
++    - Compile against the net10 BCL ref pack (SDK-resolved 10.0.x) instead of the
++      OOB 11.0.0-rc.1 pack. RuntimeFrameworkReference.targets forces the OOB pack
++      whenever $(MicrosoftNETCoreAppRefVersion) is set (it always is, from
++      eng/Version.Details.props), so net10-built assemblies would otherwise
++      reference System.Runtime 11.0.0.0 and CS1705 any net10 consumer.
++    - Resolve the Microsoft.Private.Winforms transport at a net10 version whose
++      lib/net10.0 carries the compile-time-only OLE/interop reference assemblies
++      (System.Private.Windows.Core, Accessibility, System.Windows.Forms*). The
++      pinned 11.0.0-rc.1 transport ships only lib/net11.0 and its assemblies
++      reference System.Runtime 11.0.0.0. These references are never loaded on
++      Linux (the referencing code paths sit behind OperatingSystem.IsWindows()
++      gates, patch 0013) and are not shipped in the bundle.
++  -->
++  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
++    <UseOOBNETCoreAppTargetingPack>false</UseOOBNETCoreAppTargetingPack>
++    <UseOOBNETCoreAppRuntimePack>false</UseOOBNETCoreAppRuntimePack>
++    <UseOOBNETCoreAppAppHostPack>false</UseOOBNETCoreAppAppHostPack>
++    <MicrosoftPrivateWinformsVersion>10.0.11-servicing.26373.116</MicrosoftPrivateWinformsVersion>
++  </PropertyGroup>
++
+ </Project>

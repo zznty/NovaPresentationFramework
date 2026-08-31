@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: 1
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  # Test code also sets this itself; exported here so suites that rely on the
+  # ambient variable (and the harness) never find a real display.
+  SDL_VIDEODRIVER: offscreen
+
+jobs:
+  build-test:
+    name: Build + 19 suites + harness + pack (lavapipe)
+    # WHY ubuntu-26.04 (public preview), NOT ubuntu-latest:
+    # Nova.Classification pins ICU 78 versioned symbols (u_isupper_78, ...) via
+    # [LibraryImport("icuuc", EntryPoint="u_*_78")]. ubuntu-24.04 ships ICU 74
+    # (libicuuc.so.74) -> EntryPointNotFound at runtime. The 26.04 image ships
+    # libicu-dev 78.2. Revisit when ICU 78 lands elsewhere.
+    runs-on: ubuntu-26.04
+    timeout-minutes: 300
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install .NET SDKs (global.json + net10.0 test runtime)
+        uses: actions/setup-dotnet@v4
+        with:
+          # Build SDK version lives in the repo's global.json — the single
+          # source of truth for CI and the workstation. global.json can
+          # express exactly ONE sdk.version (the net11.0-preview build SDK);
+          # the net10.0 TEST leg additionally needs a 10.0 runtime to execute
+          # (the 11-preview SDK ships only the 11 runtime), installed via the
+          # 10.0.x channel — no hardcoded patch. setup-dotnet installs both
+          # inputs when both are given.
+          global-json-file: global.json
+          dotnet-version: 10.0.x
+
+      - name: Install native prerequisites (Vulkan loader + lavapipe ICD)
+        run: |
+          sudo apt-get update
+          # GitHub runners ship NO Vulkan loader and NO ICD (verified against
+          # the ubuntu-24.04/26.04 runner manifests). The project mandates
+          # lavapipe for CPU/CI anyway (the software path is the same
+          # binary):
+          # mesa-vulkan-drivers provides lvp_icd.*.json (llvmpipe), libvulkan1
+          # provides libvulkan.so.1. Text/graphics libs are listed explicitly
+          # so the workflow never depends on an image's transitive deps.
+          sudo apt-get install -y --no-install-recommends \
+            libvulkan1 mesa-vulkan-drivers \
+            libfreetype6 libfontconfig1 libharfbuzz0b fonts-dejavu-core \
+            libicu-dev
+          # Pin the ICD explicitly (same contract as the workstation). Ubuntu
+          # names the file lvp_icd.x86_64.json; Arch names it lvp_icd.json —
+          # the glob covers both.
+          echo "VK_DRIVER_FILES=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -1)" >> "$GITHUB_ENV"
+
+      - name: Verify lavapipe ICD is present
+        run: |
+          echo "VK_DRIVER_FILES=$VK_DRIVER_FILES"
+          test -n "$VK_DRIVER_FILES"
+          cat "$VK_DRIVER_FILES"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'NuGet.config', 'third_party/Directory.Packages.props', 'packaging/Nova.PresentationFramework/Nova.PresentationFramework.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      # One script does the proven end-to-end sequence: fresh-submodule init,
+      # sparse cone, case aliases, patch series, the verify-series composition
+      # gate (MATCH=N DIFFER=0), the full dependency-ordered build (both TFM
+      # legs), the 19 suites SEQUENTIALLY (parallel Vulkan churn aborts
+      # Nova.Text), and the offscreen control/feature harness.
+      - name: Bootstrap + build + tests + harness
+        run: scripts/bootstrap-worktree.sh --tests --harness
+
+      # Pack the bundle with the Debug artifacts produced above. The pack
+      # project builds its own ordinary project references (proven: pack
+      # succeeded with WindowsFormsIntegration's bin+obj deleted — it is
+      # referenced ONLY by the pack project, and pack compiled it itself;
+      # the nupkg still carried all 36 top-level dlls), while the WPF
+      # implementation outputs come from the bootstrap build. This exercises
+      # the meta-package collectors and their fail-fast counts (36-dll
+      # contract, per-TFM) on every PR, so pack regressions cannot first
+      # appear at publish time.
+      - name: Pack bundle (contract smoke)
+        run: dotnet pack packaging/Nova.PresentationFramework/Nova.PresentationFramework.csproj -c Debug -o artifacts/packages
+
+      - name: Inspect package contents
+        run: |
+          pkg=$(ls artifacts/packages/Nova.PresentationFramework.*.nupkg)
+          echo "package: $pkg"
+          unzip -l "$pkg"
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nupkg-debug
+          path: artifacts/packages/*.nupkg
+          if-no-files-found: error

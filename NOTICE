@@ -1,0 +1,130 @@
+NovaPresentationFramework
+=========================
+
+This project is MIT-licensed original work. It does not vendor Microsoft
+WpfGfx / milcore C++ sources.
+
+It is designed to *consume* upstream `dotnet/wpf` managed assemblies
+(PresentationFramework, PresentationCore, WindowsBase, System.Xaml), which
+are themselves MIT:
+
+    Copyright (c) .NET Foundation and Contributors
+    https://github.com/dotnet/wpf/blob/main/LICENSE.TXT
+
+Redistributing those assemblies requires retaining their MIT copyright
+notice and LICENSE.TXT. Do not relicense them. Do not copy WpfGfx native
+sources into this tree.
+
+Runtime dependencies
+--------------------
+
+The runtime loads the third-party libraries described below. Each is
+consumed under permissive terms — MIT / Apache-2.0 / zlib / FTL /
+Unicode-DFS / MPL. The constraint is structural rather than a preference:
+this project redistributes MIT WPF assemblies, so every dependency in the
+bundle and in the documented runtime set must stay composable with them in
+a single product.
+
+- **SDL3** (zlib) — the windowing and presentation layer (`Nova.Sdl`,
+  `Nova.SdlSource`). Ships with the package through `Silk.NET.SDL.Native`
+  (`runtimes/linux-x64/native/libSDL3.so`); the consumer never installs it
+  separately.
+- **Silk.NET Vulkan bindings** (MIT) — the managed binding layer to the
+  Vulkan API. No DXVK appears anywhere in the rendering path.
+- **Vulkan loader**, `libvulkan.so.1` (Apache-2.0) — resolved by Silk.NET
+  at runtime. A system package, never bundled.
+- **Mesa lavapipe** (MIT) — the software Vulkan ICD the project tests
+  against and documents for CPU/CI runs; it is the same binary as the GPU
+  path, selected via `VK_DRIVER_FILES`. A system package, never bundled —
+  an ICD must match the driver stack it sits on.
+- **HarfBuzz** (MIT, the old-style license text — not the GPL option) —
+  text shaping (`Nova.HarfBuzz`).
+- **FreeType** (FTL, BSD-like) — glyph raster and font metrics
+  (`Nova.FreeType`), consumed under the FTL option, never the GPLv2
+  dual-license option.
+- **fontconfig** (MIT) — font discovery and matching (`Nova.FontConfig`).
+- **ICU**, `libicuuc` (Unicode-DFS) — `Nova.Classification` binds the
+  versioned ICU 78 symbols (`u_*_78`). A system package; the same ICU major
+  the .NET runtime itself pins.
+- **Hunspell** (tri-licensed: LGPL-2.1 / GPL-2 / MPL-1.1) — spell-checking
+  (`Nova.Hunspell`), consumed under the **MPL 1.1** option and dynamically
+  loaded from the system `libhunspell-1.7` (the Firefox model). Never
+  bundled and never statically linked, so MPL file-level copyleft stays
+  inside the system library. Loading fails cleanly when the library or a
+  dictionary is absent.
+
+Vendored tessellation engine (src/Nova.Geometry2D/Tess/)
+---------------------------------------------------------
+
+The sweep-line polygon tessellator under `src/Nova.Geometry2D/Tess/` is
+adapted from **LibTessDotNet** (https://github.com/speps/LibTessDotNet)
+by Remi Gillig — a C# port of **libtess2** by Mikko Mononen, itself a
+port of the **SGI GLU tessellator** by Eric Veach (Silicon Graphics,
+July 1994). It is distributed under the **SGI Free Software License B
+(Version 2.0, Sept. 18, 2008)**, Copyright (C) 2011 Silicon Graphics, Inc.
+All Rights Reserved.
+
+The adaptation is a port/derivative, not an independent reimplementation:
+the algorithm, data structures, and the bulk of the code follow
+LibTessDotNet line-by-line (modernized to double precision with
+span-based contour input, direct triangle output, and a reflection-free
+node pool), so the SGI notice obligations apply and are honored. The full
+license text is retained in the header of every file under
+`src/Nova.Geometry2D/Tess/` (Dict, Geom, Mesh, MeshUtils, PriorityHeap,
+PriorityQueue, Sweep, Tess, TessPool, Vec3).
+
+SGI FSL B is a permissive, non-copyleft license with the same rights as
+MIT (use, copy, modify, merge, publish, distribute, sublicense, sell)
+under one condition — the copyright notice must be included in copies or
+substantial portions — plus a no-endorsement clause on the SGI name. It is
+compatible with shipping in the same product as the MIT-licensed host and
+the MIT WPF assemblies; the bundled `Nova.Geometry2D` assembly carries this
+code.
+
+Bundled icon font (fonts/NovaFluentIcons.ttf)
+---------------------------------------------
+
+The bundled `NovaFluentIcons.ttf` is a derived font used by the Fluent
+theme's `SymbolThemeFontFamily` (the theme's default references the
+proprietary Segoe Fluent Icons / Segoe MDL2 Assets, which this project does
+not redistribute). It is built from:
+
+1. **Uno Fluent Icons** (`uno-fluentui-assets.ttf` from
+   https://github.com/unoplatform/uno.fonts), **Apache License 2.0**,
+   Copyright (c) nventive / Uno Platform. Uno Fluent Icons is itself an
+   assembled work of permissively-licensed glyph sources — **Fluent UI
+   System Icons** (MIT, Copyright (c) Microsoft Corporation), **Line
+   Awesome** (MIT / Good Boy License), and **WinJS** (MIT) — whose notices
+   are preserved in `fonts/LICENSE-uno-fonts.txt`. Full Apache-2.0 text:
+   https://www.apache.org/licenses/LICENSE-2.0.
+2. Two glyphs — `CaretSolidUp` (U+F090) and `CaretSolidDown` (U+F08E), the
+   DataGrid sort indicators — merged from **WinSymbols3.ttf** of
+   https://github.com/robloo/SymbolIconManager, **MIT License**,
+   Copyright (c) 2021 robloo (text in
+   `fonts/LICENSE-winsymbols3.txt`).
+
+The font's name table was rewritten to the unique family **"Nova Fluent
+Icons"** (the sources' generic family name is "Symbols", which is ambiguous
+for fontconfig matching); the two WinSymbols3 glyphs were copied into the
+Uno glyph set and mapped to U+F090/U+F08E. Redistribution of the derived
+font complies with Apache-2.0 §4 (attribution + license retention, both
+provided) and MIT (notice retention). No Segoe font files are bundled.
+
+Companion dependency: SixLabors.ImageSharp
+------------------------------------------
+
+`Nova.Imaging` decodes PNG/JPEG/BMP/GIF/TIFF via **SixLabors.ImageSharp**,
+pinned at `4.2.0-compat` (resolved from the project's `zznty` NuGet feed,
+mapped in `NuGet.config` to the single pattern `SixLabors.ImageSharp`).
+Copyright (c) Six Labors and contributors.
+
+Licence: **Six Labors Split License v1.0** (June 2022). The Split License
+grants the **Apache License 2.0** when the work is consumed in software
+licensed under an Open Source or Source Available license — this project is
+MIT, so our use qualifies and the effective licence is Apache-2.0
+(permissive; no GPL/LGPL). For all other scenarios the Split License
+applies the Six Labors Commercial License (paid); a downstream consumer
+must evaluate its own qualification. The full Split License v1.0 text is
+retained in the ImageSharp package itself (its own `LICENSE`,
+`license type="file"` metadata). The `-compat` build removes the
+`SixLabors.Licensing` build-time key gate (OSS build).

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Glyph atlas, shaping, and text layout.</Description>
+    <RootNamespace>Nova.Text</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Nova.FontConfig\Nova.FontConfig.csproj" />
+    <ProjectReference Include="..\Nova.FreeType\Nova.FreeType.csproj" />
+    <ProjectReference Include="..\Nova.Geometry\Nova.Geometry.csproj" />
+    <ProjectReference Include="..\Nova.HarfBuzz\Nova.HarfBuzz.csproj" />
+    <ProjectReference Include="..\Nova.Vulkan\Nova.Vulkan.csproj" />
+  </ItemGroup>
+</Project>

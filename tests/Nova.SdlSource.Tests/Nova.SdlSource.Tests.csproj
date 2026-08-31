@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <SignAssembly>true</SignAssembly>
+    <PublicSign>true</PublicSign>
+    <AssemblyOriginatorKeyFile>..\..\src\Nova.SdlSource\Wcp.PublicKey.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Nova.SdlSource\Nova.SdlSource.csproj" />
+    <Compile Include="..\NovaTestVulkan.cs" Link="NovaTestVulkan.cs" />
+    <DefaultReferenceExclusion Include="WindowsBase" />
+  </ItemGroup>
+  <Target Name="FilterImplicitAssemblyReferences"
+          AfterTargets="ResolveTargetingPackAssets"
+          BeforeTargets="_HandlePackageFileConflicts;ResolveAssemblyReferences">
+    <ItemGroup>
+      <_referenceExclusion Include="@(DefaultReferenceExclusion)">
+        <AssemblyName>%(DefaultReferenceExclusion.Identity)</AssemblyName>
+        <ExternallyResolved>true</ExternallyResolved>
+      </_referenceExclusion>
+      <Reference Remove="@(_referenceExclusion)" MatchOnMetadata="AssemblyName;ExternallyResolved" />
+    </ItemGroup>
+  </Target>
+</Project>

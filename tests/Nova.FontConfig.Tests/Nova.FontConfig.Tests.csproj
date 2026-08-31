@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Nova.FontConfig\Nova.FontConfig.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\fonts\NovaFluentIcons.ttf" Link="fonts\NovaFluentIcons.ttf" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,472 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapDecoder.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapDecoder.cs
+index 6e9cc86..a5f8298 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapDecoder.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapDecoder.cs
+@@ -296,7 +296,45 @@ out safeFilehandle
+                     );
+             }
+ 
+-            BitmapDecoder decoder = null;
++            return CreateDecoderFromHandle(
++                decoderHandle,
++                cachedDecoder,
++                baseUri,
++                uri,
++                stream,
++                createOptions,
++                cacheOption,
++                insertInDecoderCache,
++                isOriginalWritable,
++                uriStream,
++                unmanagedMemoryStream,
++                safeFilehandle,
++                clsId
++                );
++        }
++
++        /// <summary>
++        /// Wraps a pre-created decoder handle in the concrete BitmapDecoder subclass for
++        /// <paramref name="clsId"/>. Shared by the uri/stream path and the progressive
++        /// download path (which supplies its own handle and no stream).
++        /// </summary>
++        private static BitmapDecoder CreateDecoderFromHandle(
++            SafeMILHandle decoderHandle,
++            BitmapDecoder cachedDecoder,
++            Uri baseUri,
++            Uri uri,
++            Stream stream,
++            BitmapCreateOptions createOptions,
++            BitmapCacheOption cacheOption,
++            bool insertInDecoderCache,
++            bool isOriginalWritable,
++            Stream uriStream,
++            UnmanagedMemoryStream unmanagedMemoryStream,
++            SafeFileHandle safeFilehandle,
++            Guid clsId
++            )
++        {
++            BitmapDecoder decoder;
+ 
+             // Find out the decoder type and wrap it appropriately and return that
+             if (MILGuidData.GUID_ContainerFormatBmp == clsId)
+@@ -439,6 +477,64 @@ out safeFilehandle
+             return decoder;
+         }
+ 
++        /// <summary>
++        /// Wraps a managed progressive decoder token (created by Nova.Imaging) in the
++        /// concrete BitmapDecoder subclass. Used by LateBoundBitmapDecoder when the first
++        /// progressive frame arrives — there is no stream to decode, the handle IS the
++        /// decoder. The uri stays associated for the decoder cache only when
++        /// <paramref name="insertInDecoderCache"/> is set.
++        /// </summary>
++        internal static BitmapDecoder CreateFromManagedToken(
++            SafeMILHandle decoderHandle,
++            Guid clsId,
++            Uri baseUri,
++            Uri uri,
++            BitmapCreateOptions createOptions,
++            BitmapCacheOption cacheOption,
++            bool insertInDecoderCache
++            )
++        {
++            return CreateDecoderFromHandle(
++                decoderHandle,
++                null,
++                baseUri,
++                uri,
++                null,
++                createOptions,
++                cacheOption,
++                insertInDecoderCache,
++                isOriginalWritable: false,
++                null,
++                null,
++                null,
++                clsId
++                );
++        }
++
++        /// <summary>
++        /// Re-materializes every frame after a progressive update: the frame re-reads its
++        /// pixels from the (updated) decoder token and re-sends its DUCE bitmap command,
++        /// which invalidates the cached GPU texture on the next render pass.
++        /// </summary>
++        internal void RefreshProgressiveFrames()
++        {
++            if (_frames is null)
++            {
++                return;
++            }
++
++            lock (SyncObject)
++            {
++                foreach (BitmapFrame frame in _frames)
++                {
++                    if (frame is BitmapFrameDecode decode)
++                    {
++                        decode.UpdateDecoder(this);
++                    }
++                }
++            }
++        }
++
+         /// <summary>
+         /// Create a BitmapDecoder from a Uri with the specified BitmapCreateOptions and
+         /// BitmapCacheOption
+@@ -1370,7 +1466,7 @@ private static System.IO.Stream GetSeekableStream(System.IO.Stream bitmapStream)
+         /// (the UnknownBitmapDecoder path, which still works because the pixels are already
+         /// decoded in memory).
+         /// </summary>
+-        private static Guid ContainerFormatToGuid(Nova.Imaging.WicContainerFormat containerFormat)
++        internal static Guid ContainerFormatToGuid(Nova.Imaging.WicContainerFormat containerFormat)
+         {
+             return containerFormat switch
+             {
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapDownload.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapDownload.cs
+index 4f1d706..91f45d5 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapDownload.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapDownload.cs
+@@ -34,6 +34,10 @@ internal class QueueEntry
+         internal string contentType;
+         internal int lastPercent;
+         internal WebRequest webRequest;
++
++        /// <summary>The current progressive frame (SDL-runtime downloads); replaced (and the
++        /// previous one disposed) on each marshal, disposed on completion/failure.</summary>
++        internal Nova.Imaging.ProgressiveFrame? progressiveFrame;
+     }
+ 
+     #endregion
+@@ -132,23 +136,10 @@ Stream stream
+ 
+             if (!OperatingSystem.IsWindows())
+             {
+-                // Linux: the WinInet cache folder and the kernel32 temp-file APIs have
+-                // no host. A managed temp file with delete-on-close mirrors the Win32
+-                // semantics (FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE).
+-                try
+-                {
+-                    string tempPath = System.IO.Path.GetTempFileName();
+-                    entry.outputStream = new FileStream(tempPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, 4096, FileOptions.DeleteOnClose);
+-                    entry.streamPath = tempPath;
+-                    passed = true;
+-                }
+-                catch (Exception e)
+-                {
+-                    if (CriticalExceptions.IsCriticalException(e))
+-                    {
+-                        throw;
+-                    }
+-                }
++                // Linux: the download is progressive (decoded in place, no spool file), so
++                // the WinInet cache folder and the kernel32 temp-file APIs are never touched
++                // and the entry carries no output stream.
++                passed = true;
+             }
+             else
+             {
+@@ -212,7 +203,7 @@ Stream stream
+             {
+                 if (!OperatingSystem.IsWindows())
+                 {
+-                    BeginDownloadLinux(entry, uri);
++                    _ = DownloadProgressiveLinuxAsync(entry, uri);
+                 }
+                 else
+                 {
+@@ -234,32 +225,103 @@ Stream stream
+         }
+ 
+         /// <summary>
+-        ///  The SDL-runtime download path: the body is streamed with HttpClient
+-        ///  (GetStreamAsync — the response is not buffered; it returns after the headers)
+-        ///  into the managed delete-on-close temp file created in BeginDownload. Redirects
+-        ///  are followed: the Win32 path goes through HttpWebRequest, whose
+-        ///  AllowAutoRedirect defaults to true and is never overridden in
+-        ///  WpfWebRequestHelper, and SocketsHttpHandler defaults match (50 hops). The
+-        ///  uriCachePolicy is a WinInet-cache concept with no Linux counterpart and is
+-        ///  ignored here.
++        ///  The SDL-runtime download pipeline: HttpClient streams the body (GetStreamAsync —
++        ///  headers only, no response buffering) straight into the ImageSharp progressive
++        ///  decoder. Both the download and the decode run on thread-pool threads with
++        ///  ConfigureAwait(false) throughout — never on the dispatcher's sync context; each
++        ///  frame hops to the owning decoders' dispatcher ONLY to apply the pixels and
++        ///  invalidate the rendered content. The single allocator-backed chunk buffer inside
++        ///  the progressive iterator replaces the Win32 spool file. Redirects follow the
++        ///  Win32 parity (HttpWebRequest's AllowAutoRedirect default of true, never
++        ///  overridden in WpfWebRequestHelper; SocketsHttpHandler matches with 50 hops).
++        ///  The WinInet uriCachePolicy has no Linux counterpart and is ignored.
+         /// </summary>
+-        private static void BeginDownloadLinux(QueueEntry entry, Uri uri)
++        private static async Task DownloadProgressiveLinuxAsync(QueueEntry entry, Uri uri)
+         {
+-            _ = Task.Run(async () =>
++            try
+             {
+-                try
++                Stream body = await s_httpClient.GetStreamAsync(uri).ConfigureAwait(false);
++                using Nova.Imaging.ProgressiveDecoderSession session = Nova.Imaging.ProgressiveDecoderSession.Create(body, ProgressiveDecodePeriod);
++                int frameIndex = 0;
++                await foreach (Nova.Imaging.ProgressiveFrame frame in session.GetFramesAsync().ConfigureAwait(false))
+                 {
+-                    entry.inputStream = await s_httpClient.GetStreamAsync(uri).ConfigureAwait(false);
+-                    entry.contentLength = -1;
+-                    entry.contentType = string.Empty;
+-                    _workQueue.Enqueue(entry);
+-                    _waitEvent.Set();
++                    await MarshalProgressiveFrameAsync(entry, session.ContainerFormat, frame, frameIndex++).ConfigureAwait(false);
+                 }
+-                catch (Exception e)
++
++                await MarshalProgressiveCompletedAsync(entry).ConfigureAwait(false);
++            }
++            catch (Exception e)
++            {
++                entry.progressiveFrame?.Dispose();
++                entry.progressiveFrame = null;
++                MarshalException(entry, e);
++            }
++        }
++
++        /// <summary>Applies one progressive frame to every decoder waiting on the entry: the
++        /// decode already happened off-thread, so each application is a single awaited
++        /// dispatcher hop. The frame stays owned by the entry until the next frame or the
++        /// completion replaces it (applications are sequential, so the swap is safe).</summary>
++        private static async Task MarshalProgressiveFrameAsync(QueueEntry entry, Nova.Imaging.WicContainerFormat format, Nova.Imaging.ProgressiveFrame frame, int frameIndex)
++        {
++            var data = new ProgressiveFrameData(format, frame, frameIndex);
++            LateBoundBitmapDecoder[] decoders;
++            lock (_syncLock)
++            {
++                entry.progressiveFrame?.Dispose();
++                entry.progressiveFrame = frame;
++                decoders = SnapshotDecoders(entry);
++            }
++
++            foreach (LateBoundBitmapDecoder decoder in decoders)
++            {
++                Dispatcher dispatcher = decoder.Dispatcher;
++                if (dispatcher is not null)
+                 {
+-                    MarshalException(entry, e);
++                    await dispatcher.InvokeAsync(() => decoder.ProgressiveFrameCallback(data), DispatcherPriority.Normal).Task.ConfigureAwait(false);
+                 }
+-            });
++            }
++        }
++
++        /// <summary>Notifies every decoder that the download finished (100% progress) and
++        /// releases the entry from the URI table.</summary>
++        private static async Task MarshalProgressiveCompletedAsync(QueueEntry entry)
++        {
++            LateBoundBitmapDecoder[] decoders;
++            lock (_syncLock)
++            {
++                entry.progressiveFrame?.Dispose();
++                entry.progressiveFrame = null;
++                decoders = SnapshotDecoders(entry);
++                if (entry.inputUri != null)
++                {
++                    _uriTable[entry.inputUri] = null;
++                }
++            }
++
++            foreach (LateBoundBitmapDecoder decoder in decoders)
++            {
++                Dispatcher dispatcher = decoder.Dispatcher;
++                if (dispatcher is not null)
++                {
++                    await dispatcher.InvokeAsync(() => decoder.ProgressiveDownloadCompletedCallback(null), DispatcherPriority.Normal).Task.ConfigureAwait(false);
++                }
++            }
++        }
++
++        /// <summary>Snapshots the live decoder references of an entry under the sync lock.</summary>
++        private static LateBoundBitmapDecoder[] SnapshotDecoders(QueueEntry entry)
++        {
++            var decoders = new List<LateBoundBitmapDecoder>();
++            foreach (WeakReference decoderReference in entry.decoders)
++            {
++                if (decoderReference.Target is LateBoundBitmapDecoder decoder)
++                {
++                    decoders.Add(decoder);
++                }
++            }
++
++            return [.. decoders];
+         }
+ 
+         /// <summary>
+@@ -276,6 +338,27 @@ private static void BeginDownloadLinux(QueueEntry entry, Uri uri)
+             AutomaticDecompression = DecompressionMethods.None,
+         });
+ 
++        /// <summary>The minimum interval between progressive decode attempts: the cadence at
++        /// which a slow download refreshes the displayed image.</summary>
++        private static readonly TimeSpan ProgressiveDecodePeriod = TimeSpan.FromMilliseconds(150);
++
++        /// <summary>One progressive frame marshal payload.</summary>
++        internal sealed class ProgressiveFrameData
++        {
++            internal ProgressiveFrameData(Nova.Imaging.WicContainerFormat format, Nova.Imaging.ProgressiveFrame frame, int frameIndex)
++            {
++                Format = format;
++                Frame = frame;
++                FrameIndex = frameIndex;
++            }
++
++            internal Nova.Imaging.WicContainerFormat Format { get; }
++
++            internal Nova.Imaging.ProgressiveFrame Frame { get; }
++
++            internal int FrameIndex { get; }
++        }
++
+         ///
+         /// Thread Proc
+         ///
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapImage.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapImage.cs
+index 750a594..984d29f 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapImage.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapImage.cs
+@@ -884,6 +884,19 @@ private void OnDownloadCompleted(object sender, EventArgs e)
+         /// Called when download progress is made
+         private void OnDownloadProgress(object sender, DownloadProgressEventArgs e)
+         {
++            // The progressive SDL download applies real frames in place as data arrives:
++            // the first frame already carries the header dimensions, so refresh the cached
++            // size — without this PixelWidth/PixelHeight keep the EndInit-time placeholder
++            // until the download completes.
++            if (_decoder is LateBoundBitmapDecoder lateBound
++                && lateBound.RealDecoder?.Frames is { Count: > 0 } frames
++                && frames[0].PixelWidth > 0
++                && frames[0].PixelHeight > 0)
++            {
++                _pixelWidth = frames[0].PixelWidth;
++                _pixelHeight = frames[0].PixelHeight;
++            }
++
+             _progressEvent.InvokeEvents(this, e);
+         }
+ 
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/LateBoundBitmapDecoder.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/LateBoundBitmapDecoder.cs
+index c8397d6..83359c8 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/LateBoundBitmapDecoder.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/LateBoundBitmapDecoder.cs
+@@ -1,4 +1,4 @@
+-﻿// Licensed to the .NET Foundation under one or more agreements.
++// Licensed to the .NET Foundation under one or more agreements.
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+ using System.IO;
+@@ -328,6 +328,98 @@ internal object ProgressCallback(object arg)
+             return null;
+         }
+ 
++        /// <summary>
++        /// Called on the UI thread for each progressive frame. The first frame builds the real
++        /// decoder from a Nova.Imaging progressive token and completes the download transition
++        /// (early display — the image renders before the download finishes); later frames swap
++        /// the token's pixels and re-materialize the frames so the next render pass shows the
++        /// more complete decode.
++        /// </summary>
++        internal object ProgressiveFrameCallback(object arg)
++        {
++            if (_failed)
++            {
++                return null;
++            }
++
++            BitmapDownload.ProgressiveFrameData data = (BitmapDownload.ProgressiveFrameData)arg;
++            try
++            {
++                bool firstFrame = _realDecoder is null;
++                if (firstFrame)
++                {
++                    int createHr = Nova.Imaging.ManagedWicCodec.CreateProgressiveDecoderToken(data.Format, out nint decoderToken);
++                    if (createHr != 0)
++                    {
++                        throw new System.IO.InvalidDataException(SR.Image_CantDealWithStream);
++                    }
++
++                    Guid clsId = BitmapDecoder.ContainerFormatToGuid(data.Format);
++                    _realDecoder = BitmapDecoder.CreateFromManagedToken(
++                        new SafeMILHandle(decoderToken),
++                        clsId,
++                        _baseUri,
++                        _uri,
++                        _createOptions & ~BitmapCreateOptions.DelayCreation,
++                        _cacheOption,
++                        insertInDecoderCache: false);
++
++                    // Transfer any frames materialized while downloading (the placeholder
++                    // 1x1s) to the real decoder, like EnsureDecoder does on completion.
++                    if (_readOnlyFrames != null)
++                    {
++                        _realDecoder.SetupFrames(null, _readOnlyFrames);
++                        _readOnlyFrames = null;
++                        _frames = null;
++                    }
++                }
++
++                int updateHr = Nova.Imaging.ManagedWicCodec.UpdateProgressiveDecoderFrame(
++                    _realDecoder.InternalDecoder.DangerousGetHandle(),
++                    data.Frame);
++                if (updateHr != 0)
++                {
++                    throw new System.IO.InvalidDataException(SR.Image_CantDealWithStream);
++                }
++
++                _realDecoder.RefreshProgressiveFrames();
++
++                // The Win32 contract is progress reports DURING the download and the
++                // download-completed event at true completion (the image unsubscribes on
++                // completion, so no progress may follow it). The frames update in place —
++                // that is what renders progressively; the download state stays active.
++                int percent = Math.Min(90, 10 + (data.FrameIndex * 10));
++                _progressEvent.InvokeEvents(this, new DownloadProgressEventArgs(percent));
++                return null;
++            }
++            catch (Exception e)
++            {
++                return ExceptionCallback(e);
++            }
++            finally
++            {
++                data.Frame.Dispose();
++            }
++        }
++
++        /// <summary>
++        /// Called on the UI thread when the progressive download finishes: reports 100%
++        /// progress and then completes the download — exactly the Win32 order (progress 100
++        /// fires before the download event; BitmapImage unsubscribes on completion).
++        /// </summary>
++        internal object ProgressiveDownloadCompletedCallback(object arg)
++        {
++            if (_failed)
++            {
++                return null;
++            }
++
++            _progressEvent.InvokeEvents(this, new DownloadProgressEventArgs(100));
++            _isDownloading = false;
++            _downloadEvent.InvokeEvents(this, null);
++            return null;
++        }
++
+         ///
+         /// Called when an exception occurs
+         ///
+@@ -363,6 +455,10 @@ internal override void SealObject()
+         /// Real decoder
+         private BitmapDecoder _realDecoder;
+ 
++        /// <summary>The concrete decoder once a progressive frame (or the download
++        /// completion) has built it; null while only the placeholder exists.</summary>
++        internal BitmapDecoder? RealDecoder => _realDecoder;
++
+         /// <summary>
+         /// the cache policy to use for web requests.
+         /// </summary>

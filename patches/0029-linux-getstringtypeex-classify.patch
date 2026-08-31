@@ -1,0 +1,32 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/Shared/MS/Win32/SafeNativeMethodsOther.cs b/src/Microsoft.DotNet.Wpf/src/Shared/MS/Win32/SafeNativeMethodsOther.cs
+index 72d91fa..62c0268 100644
+--- a/src/Microsoft.DotNet.Wpf/src/Shared/MS/Win32/SafeNativeMethodsOther.cs
++++ b/src/Microsoft.DotNet.Wpf/src/Shared/MS/Win32/SafeNativeMethodsOther.cs
+@@ -107,6 +107,15 @@ public static int GetCaretBlinkTime()
+ 
+         public static unsafe bool GetStringTypeEx(uint locale, uint infoType, ReadOnlySpan<char> sourceString, Span<ushort> charTypes)
+         {
++            if (!OperatingSystem.IsWindows())
++            {
++                // The Win32 character-type tables classify per CT_CTYPE1/2/3; classify via
++                // the ICU-backed Nova.Classification tables so word breaking
++                // (SelectionWordBreaker) works on Linux.
++                Nova.Classification.CharTypeClassifier.GetStringType(infoType, sourceString, charTypes);
++                return true;
++            }
++
+             // Since we do not use [LibraryImport], Span<T> marshallers are not available by default
+             fixed (char* ptrSourceString = sourceString)
+             fixed (ushort* ptrCharTypes = charTypes)
+diff --git a/src/Microsoft.DotNet.Wpf/src/WindowsBase/WindowsBase.csproj b/src/Microsoft.DotNet.Wpf/src/WindowsBase/WindowsBase.csproj
+index 6c89c03..872bc24 100644
+--- a/src/Microsoft.DotNet.Wpf/src/WindowsBase/WindowsBase.csproj
++++ b/src/Microsoft.DotNet.Wpf/src/WindowsBase/WindowsBase.csproj
+@@ -392,6 +392,7 @@
+   <ItemGroup>
+     <ProjectReference Include="$(WpfSourceDir)System.Xaml\System.Xaml.csproj" />
+     <ProjectReference Include="..\..\..\..\..\..\src\Nova.SystemTheme\Nova.SystemTheme.csproj" />
++    <ProjectReference Include="..\..\..\..\..\..\src\Nova.Classification\Nova.Classification.csproj" />
+     <ProjectReference Include="$(WpfSourceDir)WindowsBase\ref\WindowsBase-ref.csproj">
+       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+     </ProjectReference>

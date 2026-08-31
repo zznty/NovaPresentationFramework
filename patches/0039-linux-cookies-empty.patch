@@ -1,0 +1,30 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/AppModel/CookieHandler.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/AppModel/CookieHandler.cs
+index a0fefd1..33a818e 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/AppModel/CookieHandler.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/AppModel/CookieHandler.cs
+@@ -101,6 +101,12 @@ internal static void HandleWebResponse(WebResponse response)
+         Justification="It's okay now. Be careful on change.")]
+     internal static string GetCookie(Uri uri, bool throwIfNoCookie)
+     {
++        if (!OperatingSystem.IsWindows())
++        {
++            // No cookie store on the SDL runtime (wininet has no Linux host).
++            return null;
++        }
++
+         UInt32 size = 0;
+         string uriString = BindUriHelper.UriToString(uri);
+         if (UnsafeNativeMethods.InternetGetCookieEx(uriString, null, null, ref size, 0, IntPtr.Zero))
+@@ -122,6 +128,12 @@ internal static string GetCookie(Uri uri, bool throwIfNoCookie)
+ 
+     internal static bool SetCookie(Uri uri, string cookieData)
+     {
++        if (!OperatingSystem.IsWindows())
++        {
++            // No cookie store on the SDL runtime (wininet has no Linux host).
++            return false;
++        }
++
+         return SetCookieUnsafe(uri, cookieData, null);
+     }
+ 

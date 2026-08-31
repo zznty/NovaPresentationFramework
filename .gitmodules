@@ -1,0 +1,5 @@
+[submodule "third_party/dotnet-wpf"]
+	path = third_party/dotnet-wpf
+	url = https://github.com/dotnet/wpf.git
+	# Pin is recorded as the gitlink SHA (see patches/UPSTREAM.txt).
+	# After clone: checkout that SHA, then cone-sparse the managed trees only.

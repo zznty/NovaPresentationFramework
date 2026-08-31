@@ -1,0 +1,164 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+    <IsAotCompatible>false</IsAotCompatible>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Area 4: localized build. UICulture makes the WinFX targets + ResGen emit
+         satellite resource assemblies (fr/Nova.XamlSample.resources.dll) and the
+         markup compiler emit MergeLocalizationDirectives. LocalizationDirectivesToLocFile
+         turns the x:Uid localization comments into a merged .loc file (the standard
+         WPF localization pipeline: MarkupCompilePass1 comments -> MergeLocalizationDirectives). -->
+    <UICulture>fr-FR</UICulture>
+    <LocalizationDirectivesToLocFile>CommentsOnly</LocalizationDirectivesToLocFile>
+    <Description>Stock-shaped WPF app on Linux: App.xaml (ApplicationDefinition) with a generated [STAThread] Main, StartupUri, ControlTemplate + DataTemplate + framework/custom attached properties, and a UICulture satellite build. No custom Main, no manual pump, no Nova-specific calls. Not in slnx (NU1201).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Configuration.ConfigurationManager" />
+    <PackageReference Include="System.IO.Packaging" />
+    <PackageReference Include="System.Windows.Extensions" />
+    <PackageReference Include="Silk.NET.SDL" />
+    <PackageReference Include="Silk.NET.SDL.Native" />
+    <PackageReference Include="Silk.NET.Vulkan" />
+  </ItemGroup>
+  <ItemGroup>
+    <!--
+      Patched WPF impl assemblies, exactly as the test suites reference them
+      (third_party/dotnet-wpf/artifacts/bin/*/Debug/net11.0/*.dll). Consumers get
+      these from the runtime-bundle nupkg instead. Requires
+      the patched assemblies to be built first: `dotnet build
+      third_party/dotnet-wpf/src/Microsoft.DotNet.Wpf/src/PresentationFramework/PresentationFramework.csproj`
+      (same prerequisite as tests/).
+    -->
+    <Reference Include="PresentationFramework">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\PresentationFramework\Debug\$(TargetFramework)\PresentationFramework.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PresentationCore">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\PresentationCore\Debug\$(TargetFramework)\PresentationCore.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="WindowsBase">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\WindowsBase\Debug\$(TargetFramework)\WindowsBase.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="System.Xaml">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\System.Xaml\Debug\$(TargetFramework)\System.Xaml.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="UIAutomationTypes">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\UIAutomationTypes\Debug\$(TargetFramework)\UIAutomationTypes.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="UIAutomationProvider">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\UIAutomationProvider\Debug\$(TargetFramework)\UIAutomationProvider.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PresentationFramework.Classic">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\PresentationFramework.Classic\Debug\$(TargetFramework)\PresentationFramework.Classic.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PresentationUI">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\PresentationUI\Debug\$(TargetFramework)\PresentationUI.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <!--
+      Nova.* runtime closure, from the Nova.SdlSource build output (it copies the
+      whole src/ tree). Consumers get these from the bundle instead.
+    -->
+    <Reference Include="Nova.Classification">
+      <HintPath>..\..\src\Nova.SdlSource\bin\Debug\$(TargetFramework)\Nova.Classification.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Nova.FontConfig">
+      <HintPath>..\..\src\Nova.SdlSource\bin\Debug\$(TargetFramework)\Nova.FontConfig.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Nova.FreeType">
+      <HintPath>..\..\src\Nova.SdlSource\bin\Debug\$(TargetFramework)\Nova.FreeType.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Nova.Geometry">
+      <HintPath>..\..\src\Nova.SdlSource\bin\Debug\$(TargetFramework)\Nova.Geometry.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Nova.Geometry2D">
+      <HintPath>..\..\src\Nova.SdlSource\bin\Debug\$(TargetFramework)\Nova.Geometry2D.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Nova.HarfBuzz">
+      <HintPath>..\..\src\Nova.SdlSource\bin\Debug\$(TargetFramework)\Nova.HarfBuzz.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Nova.Host">
+      <HintPath>..\..\src\Nova.SdlSource\bin\Debug\$(TargetFramework)\Nova.Host.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Nova.LineServices">
+      <HintPath>..\..\src\Nova.SdlSource\bin\Debug\$(TargetFramework)\Nova.LineServices.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Nova.Mil">
+      <HintPath>..\..\src\Nova.SdlSource\bin\Debug\$(TargetFramework)\Nova.Mil.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Nova.MilCmd">
+      <HintPath>..\..\src\Nova.SdlSource\bin\Debug\$(TargetFramework)\Nova.MilCmd.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Nova.Sdl">
+      <HintPath>..\..\src\Nova.SdlSource\bin\Debug\$(TargetFramework)\Nova.Sdl.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Nova.SdlSource">
+      <HintPath>..\..\src\Nova.SdlSource\bin\Debug\$(TargetFramework)\Nova.SdlSource.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Nova.SystemTheme">
+      <HintPath>..\..\src\Nova.SdlSource\bin\Debug\$(TargetFramework)\Nova.SystemTheme.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Nova.Text">
+      <HintPath>..\..\src\Nova.SdlSource\bin\Debug\$(TargetFramework)\Nova.Text.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="Nova.Vulkan">
+      <HintPath>..\..\src\Nova.SdlSource\bin\Debug\$(TargetFramework)\Nova.Vulkan.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Stock ApplicationDefinition: App.g.cs gets a [STAThread] static Main that
+         news the App, calls InitializeComponent, then Run(). StartupUri is in
+         App.xaml. -->
+    <ApplicationDefinition Include="App.xaml" />
+    <Page Include="MainWindow.xaml" />
+  </ItemGroup>
+
+  <!--
+    XAML compilation for consumers: import the SDK's WinFX targets manually,
+    because UseWPF=true fails on Linux (NETSDK1136 without a -windows TFM;
+    NETSDK1100 / zero WindowsDesktop packs with one) and the bundle deliberately
+    rejects UseWPF/FrameworkReference. $(MSBuildSDKsPath) resolves to the .NET
+    SDK's Sdks directory, which ships PresentationBuildTasks.dll (tools/net11.0)
+    and the WinFX targets on every platform. Consumers would import this from the
+    bundle's build/buildTransitive targets instead.
+
+    WinFX must be imported through $(AfterMicrosoftNETSdkTargets), not as a plain
+    <Import> in the project body: the SDK imports Microsoft.Common.CurrentVersion.targets
+    AFTER the project body, and that file REASSIGNS $(CompileDependsOn) from scratch,
+    silently dropping WinFX's appended _AfterCompileWinFXInternal (the target that runs
+    SatelliteResourceGeneration). Without it, a UICulture build never emits the
+    satellite .g.<culture>.resources and App.xaml's BAML is missing at runtime.
+    AfterMicrosoftNETSdkTargets is imported at the very end of Microsoft.NET.Sdk.targets,
+    exactly where the real WindowsDesktop SDK imports it (the UseWPF path).
+  -->
+  <PropertyGroup>
+    <AfterMicrosoftNETSdkTargets>
+      $(AfterMicrosoftNETSdkTargets);
+      $(MSBuildSDKsPath)/Microsoft.NET.Sdk.WindowsDesktop/targets/Microsoft.WinFX.targets
+    </AfterMicrosoftNETSdkTargets>
+  </PropertyGroup>
+</Project>

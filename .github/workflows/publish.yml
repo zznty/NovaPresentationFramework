@@ -1,0 +1,157 @@
+name: Publish
+
+# NuGet.org publishing is keyless: NuGet Trusted Publishing (OIDC). nuget.org
+# caps NEW API keys at 30 days (since 2026-08-17) and expires ALL pre-existing
+# long-lived keys on 2026-11-01, so an API-key workflow is not viable.
+# NuGet/login@v1 exchanges the job's GitHub OIDC token for a ~1h temporary key.
+#
+# ONE-TIME SETUP (nuget.org):
+#   1. https://www.nuget.org/account/TrustedPublishing -> create a policy for
+#      <owner>/NovaPresentationFramework, workflow file
+#      .github/workflows/publish.yml (and push job name pack-and-publish).
+#   2. Add repo variable NUGET_ORG_USER = your nuget.org username (Settings ->
+#      Secrets and variables -> Actions -> Variables). It is not a secret.
+#   3. Optional: create a GitHub Environment "nuget.org" with required
+#      reviewers and set `environment: nuget.org` on the job for an approval
+#      gate before any publish.
+# Non-nuget.org targets (workflow_dispatch only) use a scoped API key stored
+# in the NUGET_API_KEY secret — scope it to Push for the one package id on
+# that feed, and rotate per the 30-day policy.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      push_source:
+        description: "NuGet push source URL. Empty = nuget.org via trusted publishing (OIDC)."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: 1
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+
+jobs:
+  pack-and-publish:
+    name: Release pack + publish
+    runs-on: ubuntu-26.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      # id-token is required by both NuGet/login (OIDC exchange) and
+      # attest-build-provenance (SLSA provenance signing).
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install .NET SDK (from global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          # The build SDK comes from the repo's global.json — no hardcoded
+          # version here. No 10.0 runtime is needed: this job builds and
+          # packs but executes no net10.0 code (the pack's only Exec steps
+          # are git rev-parse/status for the version derivation).
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', 'NuGet.config', 'third_party/Directory.Packages.props', 'packaging/Nova.PresentationFramework/Nova.PresentationFramework.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      # Prepares the submodule (sparse cone, case aliases, patch series) and
+      # runs the series-composition gate — nothing gets packed from an
+      # unverifiable tree. --no-build: Release artifacts are built below.
+      - name: Bootstrap submodule + verify patch series
+        run: scripts/bootstrap-worktree.sh --no-build
+
+      # Stale-incremental guard from the release procedure: the WPF build's
+      # CoreCompile up-to-date check is mtime-based, so any intermediates must
+      # not survive into the Release build (no-op on a fresh runner, kept for
+      # the documented trap).
+      - name: Clean WPF intermediates
+        run: rm -rf third_party/dotnet-wpf/artifacts/obj third_party/dotnet-wpf/artifacts/bin
+
+      # Proven Release chain (exact order; pack fails with "Missing
+      # prerequisite build artifact" otherwise). Classic/Aero2/Fluent/
+      # PresentationUI are not transitive deps of anything and DesktopTheme.
+      # Host is referenced by nothing in the Framework chain.
+      - name: Release build (dependency order)
+        run: |
+          set -euo pipefail
+          for p in \
+            src/Nova.SystemTheme/Nova.SystemTheme.csproj \
+            src/Nova.SdlSource/Nova.SdlSource.csproj \
+            third_party/dotnet-wpf/src/Microsoft.DotNet.Wpf/src/PresentationFramework/PresentationFramework.csproj \
+            third_party/dotnet-wpf/src/Microsoft.DotNet.Wpf/src/System.Windows.Controls.Ribbon/System.Windows.Controls.Ribbon.csproj \
+            third_party/dotnet-wpf/src/Microsoft.DotNet.Wpf/src/Themes/PresentationFramework.Classic/PresentationFramework.Classic.csproj \
+            third_party/dotnet-wpf/src/Microsoft.DotNet.Wpf/src/Themes/PresentationFramework.Aero2/PresentationFramework.Aero2.csproj \
+            third_party/dotnet-wpf/src/Microsoft.DotNet.Wpf/src/Themes/PresentationFramework.Fluent/PresentationFramework.Fluent.csproj \
+            third_party/dotnet-wpf/src/Microsoft.DotNet.Wpf/src/PresentationUI/PresentationUI.csproj \
+            src/WindowsFormsIntegration/WindowsFormsIntegration.csproj \
+            src/Nova.DesktopTheme.Host/Nova.DesktopTheme.Host.csproj
+          do
+            dotnet build "$p" -c Release
+          done
+
+      # Version derives at pack time: 11.0.0-rc.1.<UTC-stamp>+g<sha> (.dirty
+      # never appears here — the superproject tree is clean and artifacts/ is
+      # gitignored). The pack's collectors fail fast unless all referenced
+      # projects produced outputs and exactly 36 top-level dlls were collected.
+      - name: Pack bundle
+        run: dotnet pack packaging/Nova.PresentationFramework/Nova.PresentationFramework.csproj -c Release -o artifacts/packages
+
+      - name: Locate package
+        id: pkg
+        run: |
+          pkg=$(ls artifacts/packages/Nova.PresentationFramework.*.nupkg)
+          echo "package=$pkg"
+          echo "path=$pkg" >> "$GITHUB_OUTPUT"
+
+      - name: Inspect package contents
+        run: unzip -l "${{ steps.pkg.outputs.path }}"
+
+      # SLSA provenance for the published artifact (attestation written before
+      # push; github.com shows "Build provenance" on the release artifacts).
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ${{ steps.pkg.outputs.path }}
+
+      # Keyless publish: OIDC token -> ~1h temporary API key (no secrets).
+      - name: NuGet login (trusted publishing)
+        if: inputs.push_source == ''
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_ORG_USER }}
+
+      - name: Push to nuget.org
+        if: inputs.push_source == ''
+        run: |
+          dotnet nuget push "${{ steps.pkg.outputs.path }}" \
+            --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+
+      # Alternate target (workflow_dispatch with push_source set): scoped,
+      # rotated API key from the NUGET_API_KEY secret. Never used for
+      # nuget.org — trusted publishing covers it.
+      - name: Push to custom feed
+        if: inputs.push_source != ''
+        run: |
+          dotnet nuget push "${{ steps.pkg.outputs.path }}" \
+            --api-key "${{ secrets.NUGET_API_KEY }}" \
+            --source "${{ inputs.push_source }}" \
+            --skip-duplicate

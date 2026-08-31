@@ -1,0 +1,73 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Input/Cursor.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Input/Cursor.cs
+index 3e468b3..ec7f46c 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Input/Cursor.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Input/Cursor.cs
+@@ -159,6 +159,14 @@ internal String FileName
+ 
+         private void LoadFromFile(string fileName)
+         {
++            if (!OperatingSystem.IsWindows())
++            {
++                // The SDL host manages cursors in managed code (SdlPresentationSource.SetCursor
++                // is a no-op) and never consumes the HCURSOR.
++                _cursorHandle = NativeMethods.CursorHandle.GetInvalidCursor();
++                return;
++            }
++
+             // Load a Custom Cursor
+             _cursorHandle = UnsafeNativeMethods.LoadImageCursor(IntPtr.Zero,
+                                                                 fileName,
+@@ -202,6 +210,14 @@ private void LoadFromFile(string fileName)
+ 
+         private void LegacyLoadFromStream(Stream cursorStream)
+         {
++            if (!OperatingSystem.IsWindows())
++            {
++                // The SDL host manages cursors in managed code (SdlPresentationSource.SetCursor
++                // is a no-op) and never consumes the HCURSOR.
++                _cursorHandle = NativeMethods.CursorHandle.GetInvalidCursor();
++                return;
++            }
++
+             //Generate a temporal file based on the memory stream.
+ 
+             // GetTempFileName requires unrestricted Environment permission
+@@ -266,6 +282,14 @@ private void LegacyLoadFromStream(Stream cursorStream)
+ 
+         private void LoadFromStream(Stream cursorStream)
+         {
++            if (!OperatingSystem.IsWindows())
++            {
++                // The SDL host manages cursors in managed code (SdlPresentationSource.SetCursor
++                // is a no-op) and never consumes the HCURSOR.
++                _cursorHandle = NativeMethods.CursorHandle.GetInvalidCursor();
++                return;
++            }
++
+             if (MS.Internal.CoreAppContextSwitches.AllowExternalProcessToBlockAccessToTemporaryFiles)
+             {
+                 LegacyLoadFromStream(cursorStream);
+diff --git a/src/Microsoft.DotNet.Wpf/src/Shared/MS/Win32/NativeMethodsOther.cs b/src/Microsoft.DotNet.Wpf/src/Shared/MS/Win32/NativeMethodsOther.cs
+index ce166c5..15112e2 100644
+--- a/src/Microsoft.DotNet.Wpf/src/Shared/MS/Win32/NativeMethodsOther.cs
++++ b/src/Microsoft.DotNet.Wpf/src/Shared/MS/Win32/NativeMethodsOther.cs
+@@ -1,4 +1,4 @@
+-﻿// Licensed to the .NET Foundation under one or more agreements.
++// Licensed to the .NET Foundation under one or more agreements.
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+ using System;
+@@ -286,6 +286,13 @@ private CursorHandle() : base(true, NativeMethods.CommonHandles.Cursor)
+ 
+             protected override bool ReleaseHandle()
+             {
++                if (!OperatingSystem.IsWindows())
++                {
++                    // The SDL host never created a native cursor; releasing the placeholder
++                    // (or a standard cursor handle) must not reach DestroyCursor.
++                    return true;
++                }
++
+                 return UnsafeNativeMethods.DestroyCursor( handle );
+             }
+ 

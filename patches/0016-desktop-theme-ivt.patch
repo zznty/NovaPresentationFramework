@@ -1,0 +1,12 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/OtherAssemblyAttrs.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/OtherAssemblyAttrs.cs
+index e9fe64265..3bdab02a3 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/OtherAssemblyAttrs.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/OtherAssemblyAttrs.cs
+@@ -32,6 +32,7 @@
+ [assembly: InternalsVisibleTo(BuildInfo.PresentationFrameworkSystemXml)]
+ [assembly: InternalsVisibleTo(BuildInfo.SystemWindowsControlsRibbon)]
+ [assembly: InternalsVisibleTo(BuildInfo.PresentationFrameworkFluent)]
++[assembly: InternalsVisibleTo($"Nova.DesktopTheme.Host, PublicKey={BuildInfo.WCP_PUBLIC_KEY_STRING}")]
+ [assembly: DependencyAttribute("mscorlib,", LoadHint.Always)]
+ [assembly: DependencyAttribute("System,", LoadHint.Always)]
+ [assembly: DependencyAttribute("WindowsBase,", LoadHint.Always)]

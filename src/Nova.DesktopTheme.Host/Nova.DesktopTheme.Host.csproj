@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+    <Description>Live-restyle bridge applying desktop theme changes to a running WPF app.</Description>
+    <RootNamespace>Nova.DesktopTheme.Host</RootNamespace>
+    <IsAotCompatible>false</IsAotCompatible>
+    <WpfArtifactsDir>..\..\third_party\dotnet-wpf\artifacts\bin</WpfArtifactsDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Themes\Adwaita.xaml" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- XamlReader.Parse resolves System.Windows.Extensions (TypeDescriptor) at runtime. -->
+    <PackageReference Include="System.Windows.Extensions" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Nova.DesktopTheme\Nova.DesktopTheme.csproj" />
+    <ProjectReference Include="..\Nova.SystemTheme\Nova.SystemTheme.csproj" />
+    <!-- Reference the BUILT patched WPF impl assemblies by HintPath (not ProjectReference: the
+         Framework chain already references Nova.Sdl -> Nova.SdlSource, so a ProjectReference here
+         would be a build cycle). The artifacts are produced by the prerequisite build
+         (bootstrap-worktree.sh BUILD_ORDER); EnsureWpfArtifacts fails fast with a clear message when they
+         are missing instead of the cryptic MSB3245 + downstream "type not found" errors. -->
+    <Reference Include="PresentationFramework">
+      <HintPath>$(WpfArtifactsDir)\PresentationFramework\$(Configuration)\$(TargetFramework)\PresentationFramework.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PresentationCore">
+      <HintPath>$(WpfArtifactsDir)\PresentationCore\$(Configuration)\$(TargetFramework)\PresentationCore.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="WindowsBase">
+      <HintPath>$(WpfArtifactsDir)\WindowsBase\$(Configuration)\$(TargetFramework)\WindowsBase.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="System.Xaml">
+      <HintPath>$(WpfArtifactsDir)\System.Xaml\$(Configuration)\$(TargetFramework)\System.Xaml.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+  <Target Name="EnsureWpfArtifacts" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(WpfArtifactsDir)\PresentationFramework\$(Configuration)\$(TargetFramework)\PresentationFramework.dll')"
+           Text="Patched WPF artifacts not found at '$(WpfArtifactsDir)\PresentationFramework\$(Configuration)\$(TargetFramework)\'. Build them first (run scripts/bootstrap-worktree.sh, or build the WPF projects): dotnet build third_party/dotnet-wpf/src/Microsoft.DotNet.Wpf/src/PresentationFramework/PresentationFramework.csproj -c $(Configuration)" />
+    <Error Condition="!Exists('$(WpfArtifactsDir)\PresentationCore\$(Configuration)\$(TargetFramework)\PresentationCore.dll')"
+           Text="Patched WPF artifacts not found at '$(WpfArtifactsDir)\PresentationCore\$(Configuration)\$(TargetFramework)\'. Build them first (run scripts/bootstrap-worktree.sh, or build the WPF projects)." />
+    <Error Condition="!Exists('$(WpfArtifactsDir)\WindowsBase\$(Configuration)\$(TargetFramework)\WindowsBase.dll')"
+           Text="Patched WPF artifacts not found at '$(WpfArtifactsDir)\WindowsBase\$(Configuration)\$(TargetFramework)\'. Build them first (run scripts/bootstrap-worktree.sh, or build the WPF projects)." />
+    <Error Condition="!Exists('$(WpfArtifactsDir)\System.Xaml\$(Configuration)\$(TargetFramework)\System.Xaml.dll')"
+           Text="Patched WPF artifacts not found at '$(WpfArtifactsDir)\System.Xaml\$(Configuration)\$(TargetFramework)\'. Build them first (run scripts/bootstrap-worktree.sh, or build the WPF projects)." />
+  </Target>
+  <Target Name="FilterImplicitAssemblyReferences"
+          AfterTargets="ResolveTargetingPackAssets"
+          BeforeTargets="_HandlePackageFileConflicts;ResolveAssemblyReferences">
+    <ItemGroup>
+      <_referenceExclusion Include="@(DefaultReferenceExclusion)">
+        <AssemblyName>%(DefaultReferenceExclusion.Identity)</AssemblyName>
+        <ExternallyResolved>true</ExternallyResolved>
+      </_referenceExclusion>
+      <Reference Remove="@(_referenceExclusion)" MatchOnMetadata="AssemblyName;ExternallyResolved" />
+    </ItemGroup>
+  </Target>
+</Project>

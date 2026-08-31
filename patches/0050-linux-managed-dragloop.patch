@@ -1,0 +1,232 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/DragDrop.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/DragDrop.cs
+index 708fb8e..96cf03c 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/DragDrop.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/DragDrop.cs
+@@ -369,28 +369,58 @@
+         {
+             if (!OperatingSystem.IsWindows())
+             {
+-                // Linux: no OLE drag-and-drop. ole32 is a Windows Desktop
+-                // service, and WPF's DataObject relies on System.Private.Windows.
+-                // Ole, which does not exist on this host. Fail gracefully as a
+-                // documented no-op: validate arguments exactly like Windows, then
+-                // report that no drop occurred. The OLE lifecycle events
+-                // (DragDropStarted/DragDropCompleted) are not raised because no
+-                // drag operation starts. Callers must treat DragDropEffects.None
+-                // as "no drop happened". This is deliberately NOT a DllNotFound /
+-                // process abort.
+-                ArgumentNullException.ThrowIfNull(dragSource);
+-
+-                ArgumentNullException.ThrowIfNull(data);
+-
+-                if (dragSource is UIElement || dragSource is ContentElement || dragSource is UIElement3D)
+-                {
+-                    return DragDropEffects.None;
+-                }
++                return DoDragDropLinux(dragSource, data, allowedEffects);
++            }
++
++            return DoDragDropCore(dragSource, data, allowedEffects);
++        }
++
++        /// <summary>
++        /// Registered by Nova.SdlSource (the SDL presentation source) when the
++        /// first window is created. Null before then — the drag then fails with
++        /// <see cref="DragDropEffects.None"/>.
++        /// </summary>
++        internal static Func<DependencyObject, IDataObject, DragDropEffects, DragDropEffects>? LinuxDragLoop;
+ 
++        // Linux (patch 0050): the intra-app drag loop is fully managed. The OLE
++        // DoDragDrop exists only because Windows hosts the drag in ole32; nothing
++        // in the routed-event contract needs OLE. The loop lives in Nova.SdlSource;
++        // the payload is wrapped in an OLE-free ManagedDataObject because the OLE
++        // DataObject's construction JIT-resolves System.Private.Windows.Core.
++        private static DragDropEffects DoDragDropLinux(DependencyObject dragSource, object data, DragDropEffects allowedEffects)
++        {
++            ArgumentNullException.ThrowIfNull(dragSource);
++            ArgumentNullException.ThrowIfNull(data);
++
++            if (dragSource is not UIElement && dragSource is not ContentElement && dragSource is not UIElement3D)
++            {
+                 throw new ArgumentException(SR.ScopeMustBeUIElementOrContent, nameof(dragSource));
+             }
+ 
+-            return DoDragDropCore(dragSource, data, allowedEffects);
++            RaiseDragDropLifecycleEvent(dragSource, DragDropStartedEvent);
++
++            IDataObject dataObject = data as IDataObject ?? new ManagedDataObject(data);
++            DragDropEffects result = LinuxDragLoop?.Invoke(dragSource, dataObject, allowedEffects) ?? DragDropEffects.None;
++
++            RaiseDragDropLifecycleEvent(dragSource, DragDropCompletedEvent);
++            return result;
++        }
++
++        private static void RaiseDragDropLifecycleEvent(DependencyObject source, RoutedEvent routedEvent)
++        {
++            var args = new RoutedEventArgs(routedEvent, source);
++            if (source is UIElement uiElement)
++            {
++                uiElement.RaiseEvent(args);
++            }
++            else if (source is ContentElement contentElement)
++            {
++                contentElement.RaiseEvent(args);
++            }
++            else if (source is UIElement3D uiElement3D)
++            {
++                uiElement3D.RaiseEvent(args);
++            }
+         }
+ 
+         private static DragDropEffects DoDragDropCore(DependencyObject dragSource, object data, DragDropEffects allowedEffects)
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/Internal/DragDropInterop.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/Internal/DragDropInterop.cs
+index 2a422f4..c9b1aa7 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/Internal/DragDropInterop.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/Internal/DragDropInterop.cs
+@@ -42,9 +42,38 @@
+             Raise(target, DragDrop.DropEvent, data, position, effects);
+         }
+ 
+-        private static void Raise(DependencyObject target, RoutedEvent routedEvent, IDataObject data, Point position, DragDropEffects effects)
++        // The per-phase helpers below serve the managed intra-app drag loop
++        // (DragDrop.DoDragDrop on the Linux host, patch 0050). Each raises the
++        // preview + regular event pair and returns the effects the handlers
++        // negotiated (drag-over handlers steer the cursor by setting e.Effects).
++
++        internal static DragDropEffects RaiseDragEnter(DependencyObject target, IDataObject data, Point position, DragDropEffects allowedEffects)
++        {
++            DragDropEffects effects = Raise(target, DragDrop.PreviewDragEnterEvent, data, position, allowedEffects);
++            return Raise(target, DragDrop.DragEnterEvent, data, position, effects);
++        }
++
++        internal static DragDropEffects RaiseDragOver(DependencyObject target, IDataObject data, Point position, DragDropEffects effects)
+         {
+-            var args = new DragEventArgs(data, DragDropKeyStates.None, effects, target, position)
++            effects = Raise(target, DragDrop.PreviewDragOverEvent, data, position, effects);
++            return Raise(target, DragDrop.DragOverEvent, data, position, effects);
++        }
++
++        internal static void RaiseDragLeave(DependencyObject target, IDataObject data, Point position, DragDropEffects effects)
++        {
++            Raise(target, DragDrop.PreviewDragLeaveEvent, data, position, effects);
++            Raise(target, DragDrop.DragLeaveEvent, data, position, effects);
++        }
++
++        internal static DragDropEffects RaiseDrop(DependencyObject target, IDataObject data, Point position, DragDropEffects effects)
++        {
++            effects = Raise(target, DragDrop.PreviewDropEvent, data, position, effects);
++            return Raise(target, DragDrop.DropEvent, data, position, effects);
++        }
++
++        private static DragDropEffects Raise(DependencyObject target, RoutedEvent routedEvent, IDataObject data, Point position, DragDropEffects effects)
++        {
++            var args = new DragEventArgs(data, DragDropKeyStates.LeftMouseButton, effects, target, position)
+             {
+                 RoutedEvent = routedEvent
+             };
+@@ -57,6 +86,8 @@
+             {
+                 contentElement.RaiseEvent(args);
+             }
++
++            return args.Effects;
+         }
+ 
+         /// <summary>
+@@ -133,4 +164,96 @@
+             }
+         }
+     }
++
++    /// <summary>
++    /// A managed, OLE-free <see cref="IDataObject"/> wrapping the payload an
++    /// application passed to <see cref="DragDrop.DoDragDrop"/>. Serves the text
++    /// and file-list formats the managed drag loop can carry; the OLE DataObject
++    /// (System.Private.Windows.Core) has no Linux host.
++    /// </summary>
++    internal sealed class ManagedDataObject : IDataObject
++    {
++        private readonly object _payload;
++
++        internal ManagedDataObject(object payload)
++        {
++            _payload = payload;
++        }
++
++        public object? GetData(string format)
++        {
++            return _payload is string text && IsTextFormat(format)
++                ? text
++                : _payload is string[] files && format == DataFormats.FileDrop
++                    ? files
++                    : null;
++        }
++
++        public object? GetData(string format, bool autoConvert)
++        {
++            _ = autoConvert;
++            return GetData(format);
++        }
++
++        public object? GetData(Type format)
++        {
++            return _payload is string text && format == typeof(string)
++                ? text
++                : _payload is string[] files && format == typeof(string[])
++                    ? files
++                    : null;
++        }
++
++        public bool GetDataPresent(string format)
++        {
++            return _payload is string && IsTextFormat(format) || _payload is string[] && format == DataFormats.FileDrop;
++        }
++
++        public bool GetDataPresent(string format, bool autoConvert)
++        {
++            _ = autoConvert;
++            return GetDataPresent(format);
++        }
++
++        public bool GetDataPresent(Type format)
++        {
++            return _payload is string && format == typeof(string) || _payload is string[] && format == typeof(string[]);
++        }
++
++        public string[] GetFormats()
++        {
++            return _payload is string
++                ? [DataFormats.UnicodeText]
++                : _payload is string[]
++                    ? [DataFormats.FileDrop]
++                    : [];
++        }
++
++        public string[] GetFormats(bool autoConvert)
++        {
++            _ = autoConvert;
++            return GetFormats();
++        }
++
++        public void SetData(object data)
++        {
++        }
++
++        public void SetData(string format, object data)
++        {
++        }
++
++        public void SetData(Type format, object data)
++        {
++        }
++
++        public void SetData(string format, object data, bool autoConvert)
++        {
++        }
++
++        private static bool IsTextFormat(string format)
++        {
++            return format == DataFormats.Text || format == DataFormats.UnicodeText || format == DataFormats.StringFormat;
++        }
++    }
+ }

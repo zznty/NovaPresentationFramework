@@ -1,0 +1,8 @@
+Upstream: https://github.com/dotnet/wpf
+Pin: 1346571efc19a83a90edf3abe9059d18f8412cdb (main at survey)
+Checkout: third_party/dotnet-wpf (git submodule; same SHA as the gitlink)
+Do not vendor WpfGfx. Do not keep a second clone outside this repo.
+Patches in this directory are the only allowed diffs against managed
+projects (PresentationFramework / PresentationCore / WindowsBase).
+Prefer patching `[DllImport]` nests to managed methods. ALC is leftover detection only.
+DllImport.MilCore's compiled string is still unverified.

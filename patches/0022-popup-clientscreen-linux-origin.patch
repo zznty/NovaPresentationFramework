@@ -1,0 +1,54 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Controls/Primitives/Popup.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Controls/Primitives/Popup.cs
+index 8e6a528..dd9f43a 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Controls/Primitives/Popup.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Controls/Primitives/Popup.cs
+@@ -2044,6 +2044,14 @@ private void UpdatePosition()
+                 positions = GetNumberOfCombinations(placement);
+             }
+ 
++            if (true)
++            {
++            }
++
++            if (true)
++            {
++            }
++
+             // Try each position until the best one is found
+             for (int i = 0; i < positions; i++)
+             {
+@@ -2211,6 +2219,14 @@ private void UpdatePosition()
+             int bestY = DoubleUtil.DoubleToInt(bestTranslation.Y);
+             if (bestX != _positionInfo.X || bestY != _positionInfo.Y)
+             {
++                if (true)
++                {
++                    }
++
++                if (true)
++                {
++                }
++
+                 _positionInfo.X = bestX;
+                 _positionInfo.Y = bestY;
+                 _secHelper.SetPopupPos(true, bestX, bestY, false, 0, 0);
+@@ -3010,8 +3026,17 @@ internal Point ClientToScreen(Visual rootVisual, Point clientPoint)
+             {
+                 if (!OperatingSystem.IsWindows())
+                 {
+-                    // The SDL popup's origin IS its screen position; a client point is
+-                    // already in screen coordinates (no Win32 ClientToScreen transform).
++                    // The TARGET's interest points arrive in the root visual's CLIENT
++                    // coordinates; Win32's ClientToScreen adds the window's screen origin
++                    // and the SDL path must too. (The CHILD's interest points are already
++                    // popup-local — TransformToClient only — and are never routed here, so
++                    // this add cannot accumulate.)
++                    object source = PopupSecurityHelper.GetPresentationSource(rootVisual);
++                    if (source is SdlPresentationSource sdlSource && !sdlSource.IsDisposed)
++                    {
++                        return new Point(clientPoint.X + sdlSource.PixelLeft, clientPoint.Y + sdlSource.PixelTop);
++                    }
++
+                     return clientPoint;
+                 }
+ 

@@ -1,0 +1,23 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Controls/PrintDialog.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Controls/PrintDialog.cs
+index e579e2e..6da7a87 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Controls/PrintDialog.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Controls/PrintDialog.cs
+@@ -1,4 +1,4 @@
+-﻿// Licensed to the .NET Foundation under one or more agreements.
++// Licensed to the .NET Foundation under one or more agreements.
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+ #if !DONOTREFPRINTINGASMMETA
+@@ -286,6 +286,12 @@ public PrintTicket PrintTicket
+         Nullable<bool>
+         ShowDialog()
+         {
++            if (!OperatingSystem.IsWindows())
++            {
++                // Linux host trap (patches/0046): printing has no host on the Nova/SDL
++                // runtime — the Win32 path below reaches comdlg32/winspool DllNotFound.
++                throw new PlatformNotSupportedException("Printing is not supported on this platform.");
++            }
+ 
+             Win32PrintDialog dlg = new Win32PrintDialog
+             {

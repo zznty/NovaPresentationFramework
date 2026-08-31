@@ -1,0 +1,12 @@
+<Application x:Class="Nova.XamlSample.App"
+             x:ClassModifier="internal"
+             x:Uid="App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+  <Application.Resources>
+    <!-- App-level resource merged from App.xaml; MainWindow resolves it via
+         Application.Resources lookup (StaticResource). -->
+    <SolidColorBrush x:Uid="AccentBrush" x:Key="AccentBrush" Color="#FF336699" />
+  </Application.Resources>
+</Application>

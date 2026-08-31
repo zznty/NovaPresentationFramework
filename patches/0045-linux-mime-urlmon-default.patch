@@ -1,0 +1,20 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/Shared/MS/Internal/MimeTypeMapper.cs b/src/Microsoft.DotNet.Wpf/src/Shared/MS/Internal/MimeTypeMapper.cs
+index d7208b1..b978334 100644
+--- a/src/Microsoft.DotNet.Wpf/src/Shared/MS/Internal/MimeTypeMapper.cs
++++ b/src/Microsoft.DotNet.Wpf/src/Shared/MS/Internal/MimeTypeMapper.cs
+@@ -85,6 +85,15 @@
+         //
+         private static ContentType GetMimeTypeFromUrlMon(Uri uriSource)
+         {
++            if (!OperatingSystem.IsWindows())
++            {
++                // Linux host trap (patches/0045): urlmon's FindMimeFromData is a COM
++                // call with no Linux host (patches/0024 covers the common image
++                // extensions before this path). Return the same default the Win32
++                // path gives for an unregistered extension.
++                return new ContentType("application/octet-stream");
++            }
++
+             ContentType mimeType = ContentType.Empty;
+ 
+             if (uriSource != null)

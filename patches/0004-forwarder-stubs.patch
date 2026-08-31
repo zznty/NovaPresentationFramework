@@ -1,0 +1,2004 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Span.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Span.cs
+index e91e023a..3486b8ae 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Span.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Span.cs
+@@ -1,4 +1,4 @@
+-﻿// Licensed to the .NET Foundation under one or more agreements.
++// Licensed to the .NET Foundation under one or more agreements.
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+ //+-----------------------------------------------------------------------
+@@ -15,6 +15,23 @@
+ 
+ namespace MS.Internal
+ {
++    /// <summary>
++    /// Pair of a classification element and a character length.
++    /// Lived in DirectWriteForwarder ItemSpan; required here because
++    /// <see cref="System.Span{T}"/> now occupies the bare name <c>Span</c>.
++    /// </summary>
++    internal sealed class Span
++    {
++        internal Span(object element, int length)
++        {
++            this.element = element;
++            this.length = length;
++        }
++
++        internal object element;
++        internal int length;
++    }
++
+     /// <summary>
+     /// VECTOR: A series of spans
+     /// </summary>
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/Factory.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/Factory.cs
+index 9c1014f0..268270e8 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/Factory.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/Factory.cs
+@@ -1,127 +1,35 @@
+ // Licensed to the .NET Foundation under one or more agreements.
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+-using System.Runtime.InteropServices;
+-using MS.Internal.Interop;
+-using MS.Internal.Interop.DWrite;
+-using MS.Internal.Text.TextInterface.Interfaces;
++using System.IO;
++using Nova.FontConfig;
++using Nova.FreeType;
+ 
+ namespace MS.Internal.Text.TextInterface
+ {
+     /// <summary>
+-    /// The root factory interface for all DWrite objects.
++    /// Root factory for font objects. Backed by fontconfig + FreeType, not DWrite.
+     /// </summary>
+-    internal unsafe class Factory
++    internal sealed class Factory
+     {
+-        private const int DWRITE_E_FILEFORMAT = unchecked((int)0x88985000L);
+-
+-        // b859ee5a-d838-4b5b-a2e8-1adc7d93db48
+-        private static readonly Guid IID_IDWriteFactory = new Guid(0xb859ee5a, 0xd838, 0x4b5b, 0xa2, 0xe8, 0x1a, 0xdc, 0x7d, 0x93, 0xdb, 0x48);
+-
+-        /// <summary>
+-        /// A pointer to the wrapped DWrite factory object.
+-        /// </summary>
+-        private NativeFactoryWrapper _factory;
+-
+-        /// <summary>
+-        /// The custom loader used by WPF to load font files.
+-        /// </summary>
+-        private FontFileLoader _wpfFontFileLoader;
+-
+-        /// <summary>
+-        /// The custom loader used by WPF to load font collections.
+-        /// </summary>
+-        private FontCollectionLoader _wpfFontCollectionLoader;
+-
+         private readonly IFontSourceFactory _fontSourceFactory;
++        private readonly FontConfigLibrary _fontConfig = new();
++        private readonly FreeTypeLibrary _freeType = new();
++        private FontCollection _systemFontCollection;
+ 
+-        /// <summary>
+-        /// Constructs a factory object.
+-        /// </summary>
+-        /// <param name="factoryType">Identifies whether the factory object will be shared or isolated.</param>
+-        /// <param name="fontSourceCollectionFactory">A factory object that will create managed FontSourceCollection 
+-        /// objects that will be utilized to load embedded fonts.</param>
+-        /// <param name="fontSourceFactory">A factory object that will create managed FontSource
+-        /// objects that will be utilized to load embedded fonts.</param>
+-        /// <returns>
+-        /// The factory just created.
+-        /// </returns>
+         private Factory(FactoryType factoryType, IFontSourceCollectionFactory fontSourceCollectionFactory, IFontSourceFactory fontSourceFactory)
+         {
+-            Initialize(factoryType);
+-
+-            _wpfFontFileLoader = new FontFileLoader(fontSourceFactory);
+-            _wpfFontCollectionLoader = new FontCollectionLoader(
+-                                                               fontSourceCollectionFactory,
+-                                                               _wpfFontFileLoader
+-                                                               );
+-
++            _ = factoryType;
++            _ = fontSourceCollectionFactory;
+             _fontSourceFactory = fontSourceFactory;
+-
+-            IntPtr pIDWriteFontFileLoaderMirror = Marshal.GetComInterfaceForObject(
+-                                                    _wpfFontFileLoader,
+-                                                    typeof(IDWriteFontFileLoaderMirror));
+-
+-            // Future improvement note: 
+-            // This seems a bit hacky, but unclear at this time how to implement this any better. 
+-            // When we attempt to unregister these, do we need to keep around the same IntPtr
+-            // representing the result of GetComInterfaceForObject to free it ? Or will it 
+-            // be the same if we call it again?
+-
+-
+-
+-            int hr = _factory.Value->RegisterFontFileLoader(
+-                                        (IDWriteFontFileLoader*)pIDWriteFontFileLoaderMirror.ToPointer()
+-                                        );
+-
+-            Marshal.Release(pIDWriteFontFileLoaderMirror);
+-
+-            DWriteUtil.ConvertHresultToException(hr);
+-
+-            IntPtr pIDWriteFontCollectionLoaderMirror = Marshal.GetComInterfaceForObject(
+-                                                    _wpfFontCollectionLoader,
+-                                                    typeof(IDWriteFontCollectionLoaderMirror));
+-            hr = _factory.Value->RegisterFontCollectionLoader(
+-                                                        (IDWriteFontCollectionLoader*)pIDWriteFontCollectionLoaderMirror.ToPointer()
+-                                                        );
+-
+-            Marshal.Release(pIDWriteFontCollectionLoaderMirror);
+-
+-            DWriteUtil.ConvertHresultToException(hr);
+         }
+ 
+-        internal IDWriteFactory* DWriteFactory
+-            => _factory.Value;
+-
+-        /// <summary>
+-        /// Initializes a factory object.
+-        /// </summary>
+-        /// <param name="factoryType">Identifies whether the factory object will be shared or isolated.</param>
+-        private void Initialize(FactoryType factoryType)
+-        {
+-            Guid iid = IID_IDWriteFactory;
+-            IDWriteFactory* factory = null;
+-
+-            delegate* unmanaged<int, void*, void*, int> pfnDWriteCreateFactory = DWriteLoader.GetDWriteCreateFactoryFunctionPointer();
++        internal unsafe Native.IDWriteFactory* DWriteFactory => null;
+ 
+-            int hr = pfnDWriteCreateFactory((int)DWriteTypeConverter.Convert(factoryType), &iid, &factory);
++        internal FontConfigLibrary FontConfig => _fontConfig;
+ 
+-            DWriteUtil.ConvertHresultToException(hr);
++        internal FreeTypeLibrary FreeType => _freeType;
+ 
+-            _factory = new NativeFactoryWrapper(factory, this);
+-        }
+-
+-        /// <summary>
+-        /// Creates a DirectWrite factory object that is used for subsequent creation of individual DirectWrite objects.
+-        /// </summary>
+-        /// <param name="factoryType">Identifies whether the factory object will be shared or isolated.</param>
+-        /// <param name="fontSourceCollectionFactory">A factory object that will create managed FontSourceCollection 
+-        /// objects that will be utilized to load embedded fonts.</param>
+-        /// <param name="fontSourceFactory">A factory object that will create managed FontSource
+-        /// objects that will be utilized to load embedded fonts.</param>
+-        /// <returns>
+-        /// The factory just created.
+-        /// </returns>
+         internal static Factory Create(
+             FactoryType factoryType,
+             IFontSourceCollectionFactory fontSourceCollectionFactory,
+@@ -130,249 +38,77 @@ internal static Factory Create(
+             return new Factory(factoryType, fontSourceCollectionFactory, fontSourceFactory);
+         }
+ 
+-        /// <summary>
+-        /// Creates a font file object from a local font file.
+-        /// </summary>
+-        /// <param name="filePathUri">file path uri.</param>
+-        /// <returns>
+-        /// Newly created font file object, or NULL in case of failure.
+-        /// </returns>
+         internal FontFile CreateFontFile(Uri filePathUri)
+         {
+-            Native.IDWriteFontFile* dwriteFontFile = null;
+-            int hr = InternalFactory.CreateFontFile((Native.IDWriteFactory*)_factory.Value, _wpfFontFileLoader, filePathUri, &dwriteFontFile);
+-
+-            // If DWrite's CreateFontFileReference fails then try opening the file using WPF's logic.
+-            // The failures that WPF returns are more granular than the HRESULTs that DWrite returns
+-            // thus we use WPF's logic to open the file to throw the same exceptions that
+-            // WPF would have thrown before.
+-            if (hr != 0)
++            ArgumentNullException.ThrowIfNull(filePathUri);
++            if (IsLocalUri(filePathUri) && !File.Exists(filePathUri.LocalPath))
+             {
+                 IFontSource fontSource = _fontSourceFactory.Create(filePathUri.AbsoluteUri);
+                 fontSource.TestFileOpenable();
+-
+             }
+ 
+-            //This call is made to prevent this object from being collected and hence get its finalize method called 
+-            //While there are others referencing it.
+-            GC.KeepAlive(this);
+-
+-            DWriteUtil.ConvertHresultToException(hr);
+-
+-            return new FontFile(dwriteFontFile);
++            return new FontFile(filePathUri);
+         }
+ 
+-        /// <summary>
+-        /// Creates a font face object.
+-        /// </summary>
+-        /// <param name="filePathUri">The file path of the font face.</param>
+-        /// <param name="faceIndex">The zero based index of a font face in cases when the font files contain a collection of font faces.
+-        /// If the font files contain a single face, this value should be zero.</param>
+-        /// <returns>
+-        /// Newly created font face object, or NULL in case of failure.
+-        /// </returns>
+         internal FontFace CreateFontFace(Uri filePathUri, uint faceIndex)
+         {
+-            return CreateFontFace(
+-                                 filePathUri,
+-                                 faceIndex,
+-                                 FontSimulations.None
+-                                 );
++            return CreateFontFace(filePathUri, faceIndex, FontSimulations.None);
+         }
+ 
+-        /// <summary>
+-        /// Creates a font face object.
+-        /// </summary>
+-        /// <param name="filePathUri">The file path of the font face.</param>
+-        /// <param name="faceIndex">The zero based index of a font face in cases when the font files contain a collection of font faces.
+-        /// If the font files contain a single face, this value should be zero.</param>
+-        /// <param name="fontSimulationFlags">Font face simulation flags for algorithmic emboldening and italicization.</param>
+-        /// <returns>
+-        /// Newly created font face object, or NULL in case of failure.
+-        /// </returns>
+         internal FontFace CreateFontFace(Uri filePathUri, uint faceIndex, FontSimulations fontSimulationFlags)
+         {
+-            FontFile fontFile = CreateFontFile(filePathUri);
+-            Native.DWRITE_FONT_FILE_TYPE dwriteFontFileType;
+-            Native.DWRITE_FONT_FACE_TYPE dwriteFontFaceType;
+-            uint numberOfFaces = 0;
+-
+-            int hr;
+-            if (fontFile.Analyze(
+-                                 out dwriteFontFileType,
+-                                 out dwriteFontFaceType,
+-                                 out numberOfFaces,
+-                                 &hr
+-                                 ))
+-            {
+-                ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(faceIndex, numberOfFaces);
+-
+-                byte dwriteFontSimulationsFlags = DWriteTypeConverter.Convert(fontSimulationFlags);
+-                IDWriteFontFace* dwriteFontFace = null;
+-                IDWriteFontFile* dwriteFontFile = (IDWriteFontFile*)fontFile.DWriteFontFileNoAddRef;
+-
+-                hr = _factory.Value->CreateFontFace(
+-                                                     (DWRITE_FONT_FACE_TYPE)dwriteFontFaceType,
+-                                                     1,
+-                                                     &dwriteFontFile,
+-                                                     faceIndex,
+-                                                     (DWRITE_FONT_SIMULATIONS)dwriteFontSimulationsFlags,
+-                                                     &dwriteFontFace
+-                                                     );
+-                GC.KeepAlive(fontFile);
+-                GC.KeepAlive(this);
+-
+-                DWriteUtil.ConvertHresultToException(hr);
+-
+-                return new FontFace((Native.IDWriteFontFace*)dwriteFontFace);
+-            }
+-
+-            // This path is here because there is a behavior mismatch between DWrite and WPF.
+-            // If a directory was given instead of a font uri WPF previously throws 
+-            // System.UnauthorizedAccessException. We handle most of the exception behavior mismatch 
+-            // in FontFile^ Factory::CreateFontFile by opening the file using WPF's previous (prior to DWrite integration) logic if 
+-            // CreateFontFileReference fails (please see comments in FontFile^ Factory::CreateFontFile).
+-            // However in this special case DWrite's CreateFontFileReference will succeed if given
+-            // a directory instead of a font file and it is the Analyze() call will fail returning DWRITE_E_FILEFORMAT.
+-            // Thus, incase the hr returned from Analyze() was DWRITE_E_FILEFORMAT we do as we did in FontFile^ Factory::CreateFontFile
+-            // to try and open the file using WPF old logic and throw System.UnauthorizedAccessException as WPF used to do.
+-            // If a file format exception is expected then opening the file should succeed and ConvertHresultToException()
+-            // Should throw the correct exception.
+-            // A final note would be that this overhead is only incurred in error conditions and so the normal execution path should
+-            // not be affected.
+-            else
++            using FontFile fontFile = CreateFontFile(filePathUri);
++            if (!fontFile.Analyze(out _, out _, out uint numberOfFaces, out int hr))
+             {
+-                if (hr == DWRITE_E_FILEFORMAT)
++                if (hr == unchecked((int)0x88985000L))
+                 {
+                     IFontSource fontSource = _fontSourceFactory.Create(filePathUri.AbsoluteUri);
+                     fontSource.TestFileOpenable();
+                 }
+-                DWriteUtil.ConvertHresultToException(hr);
++
++                throw new FileFormatException(filePathUri);
+             }
+ 
+-            return null;
++            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(faceIndex, numberOfFaces);
++            Nova.FreeType.FontFace native = _freeType.OpenFace(filePathUri.LocalPath, (int)faceIndex);
++            return new FontFace(native, filePathUri, faceIndex, fontSimulationFlags);
+         }
+ 
+-        /// <summary>
+-        /// Gets a font collection representing the set of installed fonts.
+-        /// </summary>
+-        /// <returns>
+-        /// The system font collection.
+-        /// </returns>
+         internal FontCollection GetSystemFontCollection()
+         {
+             return GetSystemFontCollection(false);
+         }
+ 
+-        /// <summary>
+-        /// Gets a font collection representing the set of installed fonts.
+-        /// </summary>
+-        /// <param name="checkForUpdates">If this parameter is true, the function performs an immediate check for changes to the set of
+-        /// installed fonts. If this parameter is FALSE, the function will still detect changes if the font cache service is running, but
+-        /// there may be some latency. For example, an application might specify TRUE if it has itself just installed a font and wants to 
+-        /// be sure the font collection contains that font.</param>
+-        /// <returns>
+-        /// The system font collection.
+-        /// </returns>
+         private FontCollection GetSystemFontCollection(bool checkForUpdates)
+         {
+-            IDWriteFontCollection* fontCollection = null;
+-            int checkForUpdatesInt = checkForUpdates ? 1 : 0;
+-            int hr = _factory.Value->GetSystemFontCollection(&fontCollection, checkForUpdatesInt);
+-
+-            DWriteUtil.ConvertHresultToException(hr);
++            if (checkForUpdates)
++            {
++                _systemFontCollection = null;
++            }
+ 
+-            return new FontCollection((Native.IDWriteFontCollection*)fontCollection);
++            _systemFontCollection ??= FontCollection.CreateSystem(this);
++            return _systemFontCollection;
+         }
+ 
+-        /// <summary>
+-        /// Gets a font collection in a custom location.
+-        /// </summary>
+-        /// <param name="uri">The uri of the font collection.</param>
+-        /// <returns>
+-        /// The font collection.
+-        /// </returns>
+         internal FontCollection GetFontCollection(Uri uri)
+         {
+-            string uriString = uri.AbsoluteUri;
+-            IDWriteFontCollection* dwriteFontCollection = null;
+-
+-            IntPtr pIDWriteFontCollectionLoaderMirror = Marshal.GetComInterfaceForObject(
+-                                                    _wpfFontCollectionLoader,
+-                                                    typeof(IDWriteFontCollectionLoaderMirror));
+-
+-            IDWriteFontCollectionLoader* pIDWriteFontCollectionLoader = 
+-                (IDWriteFontCollectionLoader*)pIDWriteFontCollectionLoaderMirror.ToPointer();
+-
+-            int hr;
+-
+-            fixed (char* uriStringPtr = uriString)
++            ArgumentNullException.ThrowIfNull(uri);
++            if (IsLocalUri(uri) && Directory.Exists(uri.LocalPath))
+             {
+-                uint collectionKeySize = (uint)((uriString.Length + 1) * sizeof(char));
+-                hr = _factory.Value->CreateCustomFontCollection(pIDWriteFontCollectionLoader, uriStringPtr, collectionKeySize, &dwriteFontCollection);
++                return FontCollection.CreateFromDirectory(this, uri.LocalPath);
+             }
+ 
+-            Marshal.Release(pIDWriteFontCollectionLoaderMirror);
+-
+-            GC.KeepAlive(this);
+-
+-            DWriteUtil.ConvertHresultToException(hr);
+-
+-            return new FontCollection((Native.IDWriteFontCollection*)dwriteFontCollection);
++            return GetSystemFontCollection();
+         }
+ 
+         internal TextAnalyzer CreateTextAnalyzer()
+         {
+-            IDWriteTextAnalyzer* textAnalyzer = null;
+-
+-            _factory.Value->CreateTextAnalyzer(&textAnalyzer);
+-
+-            return new TextAnalyzer((Native.IDWriteTextAnalyzer*)textAnalyzer);
++            return new TextAnalyzer(this);
+         }
+ 
+         internal static bool IsLocalUri(Uri uri)
+         {
+             return uri.IsFile && uri.IsLoopback && !uri.IsUnc;
+         }
+-
+-        private sealed unsafe class NativeFactoryWrapper : NativeIUnknownWrapper<IDWriteFactory>
+-        {
+-            private readonly Factory _managedFactory;
+-
+-            public NativeFactoryWrapper(void* nativePointer, Factory managedFactory)
+-                : base(nativePointer)
+-            {
+-                _managedFactory = managedFactory;
+-            }
+-
+-            protected override bool ReleaseHandle()
+-            {
+-                FontCollectionLoader wpfFontCollectionLoader = _managedFactory._wpfFontCollectionLoader;
+-                if (wpfFontCollectionLoader != null)
+-                {
+-                    IntPtr pIDWriteFontCollectionLoaderMirror = Marshal.GetComInterfaceForObject(
+-                                                            wpfFontCollectionLoader,
+-                                                            typeof(IDWriteFontCollectionLoaderMirror));
+-
+-                    Value->UnregisterFontCollectionLoader((IDWriteFontCollectionLoader*)pIDWriteFontCollectionLoaderMirror.ToPointer());
+-                    Marshal.Release(pIDWriteFontCollectionLoaderMirror);
+-                    _managedFactory._wpfFontCollectionLoader = null;
+-                }
+-
+-                FontFileLoader wpfFontFileLoader = _managedFactory._wpfFontFileLoader;
+-                if (wpfFontFileLoader != null)
+-                {
+-                    IntPtr pIDWriteFontFileLoaderMirror = Marshal.GetComInterfaceForObject(
+-                                                            wpfFontFileLoader,
+-                                                            typeof(IDWriteFontFileLoaderMirror));
+-
+-                    Value->UnregisterFontFileLoader((IDWriteFontFileLoader*)pIDWriteFontFileLoaderMirror.ToPointer());
+-                    Marshal.Release(pIDWriteFontFileLoaderMirror);
+-                    _managedFactory._wpfFontFileLoader = null;
+-                }
+-
+-                return base.ReleaseHandle();
+-            }
+-        }
+     }
+ }
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj b/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj
+index bfbade2e..9c81fe09 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj
+@@ -279,6 +279,8 @@
+     <Compile Include="MS\Internal\Text\TextInterface\DWriteUtil.cs" />
+     <Compile Include="MS\Internal\Text\TextInterface\Factory.cs" />
+     <Compile Include="MS\Internal\Text\TextInterface\FontCollectionLoader.cs" />
++    <Compile Include="MS\Internal\Text\TextInterface\ForwarderStubs.cs" />
++    <Compile Include="MS\Internal\Text\TextInterface\NovaFontTypes.cs" />
+     <Compile Include="MS\Internal\Text\TextInterface\IFontSourceCollection.cs" />
+     <Compile Include="MS\Internal\TextFormatting\Bidi.cs" />
+     <Compile Include="MS\Internal\TextFormatting\CultureMapper.cs" />
+@@ -1395,6 +1397,10 @@
+   <ItemGroup>
+     <!-- required for internals access -->
+     <ProjectReference Include="$(WpfSourceDir)WindowsBase\WindowsBase.csproj" />
+     <ProjectReference Include="..\..\..\..\..\..\src\Nova.Mil\Nova.Mil.csproj" />
++    <ProjectReference Include="..\..\..\..\..\..\src\Nova.Geometry\Nova.Geometry.csproj" />
++    <ProjectReference Include="..\..\..\..\..\..\src\Nova.FontConfig\Nova.FontConfig.csproj" />
++    <ProjectReference Include="..\..\..\..\..\..\src\Nova.FreeType\Nova.FreeType.csproj" />
++    <ProjectReference Include="..\..\..\..\..\..\src\Nova.HarfBuzz\Nova.HarfBuzz.csproj" />
+     <ProjectReference Include="$(WpfSourceDir)System.Xaml\System.Xaml.csproj" />
+     <ProjectReference Include="$(WpfSourceDir)System.Windows.Input.Manipulations\System.Windows.Input.Manipulations.csproj" />
+     <ProjectReference Include="$(WpfSourceDir)System.Windows.Primitives\System.Windows.Primitives.csproj" />
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/ForwarderStubs.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/ForwarderStubs.cs
+new file mode 100644
+index 00000000..87f9044e
+--- /dev/null
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/ForwarderStubs.cs
+@@ -0,0 +1,472 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++
++// Compile-unblock shells for types that lived in DirectWriteForwarder (C++/CLI).
++// Bodies throw. This is not a text engine. Do not port DWrite here.
++
++using System;
++using System.Collections;
++using System.Collections.Generic;
++using System.Globalization;
++using System.IO;
++using System.Runtime.InteropServices;
++using System.Windows.Media;
++using MS.Internal.Interop.DWrite;
++using MS.Internal.TextFormatting;
++
++namespace MS.Internal.Text.TextInterface.Interfaces
++{
++    [ComImport]
++    [Guid("727cad4e-d6af-4c9e-8a08-d695b11caa49")]
++    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
++    internal unsafe interface IDWriteFontFileLoaderMirror
++    {
++        [PreserveSig]
++        int CreateStreamFromKey([In] void* fontFileReferenceKey, [In, MarshalAs(UnmanagedType.U4)] uint fontFileReferenceKeySize, IntPtr* fontFileStream);
++    }
++
++    [ComImport]
++    [Guid("72755049-5ff7-435d-8348-4be97cfa6c7c")]
++    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
++    internal unsafe interface IDWriteFontFileEnumeratorMirror
++    {
++        [PreserveSig]
++        int MoveNext(int* hasCurrentFile);
++
++        [PreserveSig]
++        int GetCurrentFontFile(IntPtr* fontFile);
++    }
++}
++
++namespace MS.Internal.Text.TextInterface.Native
++{
++    internal struct IDWriteFactory
++    {
++    }
++
++    internal struct IDWriteFontFile
++    {
++    }
++
++    internal struct IDWriteFontFace
++    {
++    }
++
++    internal struct IDWriteFontCollection
++    {
++    }
++
++    internal struct IDWriteTextAnalyzer
++    {
++    }
++
++    internal enum DWRITE_FONT_FILE_TYPE
++    {
++        DWRITE_FONT_FILE_TYPE_UNKNOWN,
++        DWRITE_FONT_FILE_TYPE_CFF,
++        DWRITE_FONT_FILE_TYPE_TRUETYPE,
++        DWRITE_FONT_FILE_TYPE_OPENTYPE_COLLECTION,
++        DWRITE_FONT_FILE_TYPE_TYPE1,
++        DWRITE_FONT_FILE_TYPE_VECTOR,
++        DWRITE_FONT_FILE_TYPE_BITMAP,
++        DWRITE_FONT_FILE_TYPE_TRUETYPE_COLLECTION = DWRITE_FONT_FILE_TYPE_OPENTYPE_COLLECTION,
++    }
++
++    internal enum DWRITE_FONT_FACE_TYPE
++    {
++        DWRITE_FONT_FACE_TYPE_CFF,
++        DWRITE_FONT_FACE_TYPE_TRUETYPE,
++        DWRITE_FONT_FACE_TYPE_OPENTYPE_COLLECTION,
++        DWRITE_FONT_FACE_TYPE_TYPE1,
++        DWRITE_FONT_FACE_TYPE_VECTOR,
++        DWRITE_FONT_FACE_TYPE_BITMAP,
++        DWRITE_FONT_FACE_TYPE_UNKNOWN,
++        DWRITE_FONT_FACE_TYPE_RAW_CFF,
++        DWRITE_FONT_FACE_TYPE_TRUETYPE_COLLECTION = DWRITE_FONT_FACE_TYPE_OPENTYPE_COLLECTION,
++    }
++}
++
++namespace MS.Internal.Text.TextInterface
++{
++    internal enum FactoryType
++    {
++        Shared,
++        Isolated
++    }
++
++    [Flags]
++    internal enum FontSimulations
++    {
++        None = 0,
++        Bold = 1,
++        Oblique = 2
++    }
++
++    internal enum FontWeight
++    {
++        Thin = 100,
++        ExtraLight = 200,
++        UltraLight = 200,
++        Light = 300,
++        Normal = 400,
++        Regular = 400,
++        Medium = 500,
++        DemiBold = 600,
++        SemiBOLD = 600,
++        Bold = 700,
++        ExtraBold = 800,
++        UltraBold = 800,
++        Black = 900,
++        Heavy = 900,
++        ExtraBlack = 950,
++        UltraBlack = 950
++    }
++
++    internal enum FontStyle
++    {
++        Normal = 0,
++        Oblique = 1,
++        Italic = 2
++    }
++
++    internal enum FontStretch
++    {
++        Undefined = 0,
++        UltraCondensed = 1,
++        ExtraCondensed = 2,
++        Condensed = 3,
++        SemiCondensed = 4,
++        Normal = 5,
++        Medium = 5,
++        SemiExpanded = 6,
++        Expanded = 7,
++        ExtraExpanded = 8,
++        UltraExpanded = 9
++    }
++
++    internal enum FontFaceType
++    {
++        CFF,
++        TrueType,
++        TrueTypeCollection,
++        Type1,
++        Vector,
++        Bitmap,
++        Unknown,
++        RawCFF
++    }
++
++    internal enum InformationalStringID
++    {
++        None,
++        CopyrightNotice,
++        VersionStrings,
++        Trademark,
++        Manufacturer,
++        Designer,
++        DesignerURL,
++        Description,
++        FontVendorURL,
++        LicenseDescription,
++        LicenseInfoURL,
++        WIN32FamilyNames,
++        Win32SubFamilyNames,
++        PreferredFamilyNames,
++        PreferredSubFamilyNames,
++        SampleText
++    }
++
++    internal enum OpenTypeTableTag
++    {
++        TTO_GSUB = 0x42555347,
++        TTO_GPOS = 0x534F5047,
++        TTO_GDEF = 0x46454447
++    }
++
++    internal enum DWriteFontFeatureTag
++    {
++        AlternativeFractions = 0x63726661,
++        PetiteCapitalsFromCapitals = 0x63703263,
++        SmallCapitalsFromCapitals = 0x63733263,
++        ContextualAlternates = 0x746c6163,
++        CaseSensitiveForms = 0x65736163,
++        GlyphCompositionDecomposition = 0x706d6363,
++        ContextualLigatures = 0x67696c63,
++        CapitalSpacing = 0x70737063,
++        ContextualSwash = 0x68777363,
++        CursivePositioning = 0x73727563,
++        Default = 0x746c6664,
++        DiscretionaryLigatures = 0x67696c64,
++        ExpertForms = 0x74707865,
++        Fractions = 0x63617266,
++        FullWidth = 0x64697766,
++        HalfForms = 0x666c6168,
++        HalantForms = 0x6e6c6168,
++        AlternateHalfWidth = 0x746c6168,
++        HistoricalForms = 0x74736968,
++        HorizontalKanaAlternates = 0x616e6b68,
++        HistoricalLigatures = 0x67696c68,
++        HalfWidth = 0x64697768,
++        HojoKanjiForms = 0x6f6a6f68,
++        JIS04Forms = 0x3430706a,
++        JIS78Forms = 0x3837706a,
++        JIS83Forms = 0x3338706a,
++        JIS90Forms = 0x3039706a,
++        Kerning = 0x6e72656b,
++        StandardLigatures = 0x6167696c,
++        LiningFigures = 0x6d756e6c,
++        LocalizedForms = 0x6c636f6c,
++        MarkPositioning = 0x6b72616d,
++        MathematicalGreek = 0x6b72676d,
++        MarkToMarkPositioning = 0x6b6d6b6d,
++        AlternateAnnotationForms = 0x746c616e,
++        NLCKanjiForms = 0x6b636c6e,
++        OldStyleFigures = 0x6d756e6f,
++        Ordinals = 0x6e64726f,
++        ProportionalAlternateWidth = 0x746c6170,
++        PetiteCapitals = 0x70616370,
++        ProportionalFigures = 0x6d756e70,
++        ProportionalWidths = 0x64697770,
++        QuarterWidths = 0x64697771,
++        RequiredLigatures = 0x67696c72,
++        RubyNotationForms = 0x79627572,
++        StylisticAlternates = 0x746c6173,
++        ScientificInferiors = 0x666e6973,
++        SmallCapitals = 0x70636d73,
++        SimplifiedForms = 0x6c706d73,
++        StylisticSet1 = 0x31307373,
++        StylisticSet2 = 0x32307373,
++        StylisticSet3 = 0x33307373,
++        StylisticSet4 = 0x34307373,
++        StylisticSet5 = 0x35307373,
++        StylisticSet6 = 0x36307373,
++        StylisticSet7 = 0x37307373,
++        StylisticSet8 = 0x38307373,
++        StylisticSet9 = 0x39307373,
++        StylisticSet10 = 0x30317373,
++        StylisticSet11 = 0x31317373,
++        StylisticSet12 = 0x32317373,
++        StylisticSet13 = 0x33317373,
++        StylisticSet14 = 0x34317373,
++        StylisticSet15 = 0x35317373,
++        StylisticSet16 = 0x36317373,
++        StylisticSet17 = 0x37317373,
++        StylisticSet18 = 0x38317373,
++        StylisticSet19 = 0x39317373,
++        StylisticSet20 = 0x30327373,
++        Subscript = 0x73627573,
++        Superscript = 0x73707573,
++        Swash = 0x68737773,
++        Titling = 0x6c746974,
++        TraditionalNameForms = 0x6d616e74,
++        TabularFigures = 0x6d756e74,
++        TraditionalForms = 0x64617274,
++        ThirdWidths = 0x64697774,
++        Unicase = 0x63696e75,
++        SlashedZero = 0x6f72657a
++    }
++
++    [StructLayout(LayoutKind.Explicit)]
++    internal struct GlyphMetrics
++    {
++        [FieldOffset(0)]
++        internal int LeftSideBearing;
++
++        [FieldOffset(4)]
++        internal uint AdvanceWidth;
++
++        [FieldOffset(8)]
++        internal int RightSideBearing;
++
++        [FieldOffset(12)]
++        internal int TopSideBearing;
++
++        [FieldOffset(16)]
++        internal uint AdvanceHeight;
++
++        [FieldOffset(20)]
++        internal int BottomSideBearing;
++
++        [FieldOffset(24)]
++        internal int VerticalOriginY;
++    }
++
++    internal struct GlyphOffset
++    {
++        internal int du;
++        internal int dv;
++    }
++
++    [StructLayout(LayoutKind.Sequential)]
++    internal struct DWriteFontFeature
++    {
++        internal DWriteFontFeatureTag nameTag;
++        internal uint parameter;
++
++        internal DWriteFontFeature(DWriteFontFeatureTag dwriteNameTag, uint dwriteParameter)
++        {
++            nameTag = dwriteNameTag;
++            parameter = dwriteParameter;
++        }
++    }
++
++    [StructLayout(LayoutKind.Explicit)]
++    internal sealed class FontMetrics
++    {
++        [FieldOffset(0)]
++        internal ushort DesignUnitsPerEm;
++
++        [FieldOffset(2)]
++        internal ushort Ascent;
++
++        [FieldOffset(4)]
++        internal ushort Descent;
++
++        [FieldOffset(8)]
++        internal short LineGap;
++
++        [FieldOffset(10)]
++        internal ushort CapHeight;
++
++        [FieldOffset(12)]
++        internal ushort XHeight;
++
++        [FieldOffset(14)]
++        internal short UnderlinePosition;
++
++        [FieldOffset(16)]
++        internal ushort UnderlineThickness;
++
++        [FieldOffset(18)]
++        internal short StrikethroughPosition;
++
++        [FieldOffset(20)]
++        internal ushort StrikethroughThickness;
++
++        internal double Baseline => (Ascent + (LineGap * 0.5)) / DesignUnitsPerEm;
++
++        internal double LineSpacing => (double)(Ascent + Descent + LineGap) / DesignUnitsPerEm;
++    }
++
++    internal interface IFontSource
++    {
++        void TestFileOpenable();
++
++        UnmanagedMemoryStream GetUnmanagedStream();
++
++        DateTime GetLastWriteTimeUtc();
++
++        Uri Uri { get; }
++
++        bool IsComposite { get; }
++    }
++
++    internal interface IFontSourceFactory
++    {
++        IFontSource Create(string uriString);
++    }
++
++    internal interface IClassification
++    {
++        void GetCharAttribute(
++            int unicodeScalar,
++            out bool isCombining,
++            out bool needsCaretInfo,
++            out bool isIndic,
++            out bool isDigit,
++            out bool isLatin,
++            out bool isStrong);
++    }
++
++    internal delegate int CreateTextAnalysisSource(
++        char* text,
++        uint length,
++        char* culture,
++        void* factory,
++        bool isRightToLeft,
++        char* numberCulture,
++        bool ignoreUserOverride,
++        uint numberSubstitutionMethod,
++        void** ppTextAnalysisSource);
++
++    internal delegate void* CreateTextAnalysisSink();
++
++    internal delegate void* GetScriptAnalysisList(void* textAnalysisSink);
++
++    internal delegate void* GetNumberSubstitutionList(void* textAnalysisSink);
++
++    internal static class LocalizedErrorMsgs
++    {
++        internal static string EnumeratorNotStarted { get; set; } = string.Empty;
++
++        internal static string EnumeratorReachedEnd { get; set; } = string.Empty;
++    }
++
++    internal static class DWriteTypeConverter
++    {
++        internal static int Convert(FactoryType factoryType)
++        {
++            return (int)factoryType;
++        }
++
++        internal static byte Convert(FontSimulations fontSimulations)
++        {
++            return (byte)fontSimulations;
++        }
++
++        internal static int Convert(TextFormattingMode textFormattingMode)
++        {
++            return (int)textFormattingMode;
++        }
++    }
++
++    internal static unsafe class InternalFactory
++    {
++        internal static int CreateFontFile(Native.IDWriteFactory* factory, FontFileLoader fontFileLoader, Uri filePathUri, Native.IDWriteFontFile** fontFile)
++        {
++            throw new NotImplementedException();
++        }
++    }
++
++    [ComVisible(true)]
++    internal unsafe class FontFileLoader : Interfaces.IDWriteFontFileLoaderMirror
++    {
++        public FontFileLoader(IFontSourceFactory fontSourceFactory)
++        {
++        }
++
++        public int CreateStreamFromKey(void* fontFileReferenceKey, uint fontFileReferenceKeySize, IntPtr* fontFileStream)
++        {
++            throw new NotImplementedException();
++        }
++    }
++
++    [ComVisible(true)]
++    internal unsafe class FontFileEnumerator : Interfaces.IDWriteFontFileEnumeratorMirror
++    {
++        public FontFileEnumerator(IFontSourceCollection fontSourceCollection, FontFileLoader fontFileLoader, Native.IDWriteFactory* factory)
++        {
++        }
++
++        public int MoveNext(int* hasCurrentFile)
++        {
++            throw new NotImplementedException();
++        }
++
++        public int GetCurrentFontFile(IntPtr* fontFile)
++        {
++            throw new NotImplementedException();
++        }
++    }
++}
++
++namespace MS.Internal.FontFace
++{
++    internal static unsafe class TrueTypeSubsetter
++    {
++        internal static byte[] ComputeSubset(void* fontData, int fileSize, Uri sourceUri, int directoryOffset, ushort[] glyphArray)
++        {
++            throw new NotImplementedException();
++        }
++    }
++}
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/NovaFontTypes.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/NovaFontTypes.cs
+new file mode 100644
+index 00000000..58b851b5
+--- /dev/null
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/Text/TextInterface/NovaFontTypes.cs
+@@ -0,0 +1,1043 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++
++using System.Collections;
++using System.Globalization;
++using System.IO;
++using System.Windows.Media;
++using Nova.FontConfig;
++using Nova.FreeType;
++using Nova.HarfBuzz;
++using MS.Internal.TextFormatting;
++
++namespace MS.Internal.Text.TextInterface
++{
++    internal sealed class LocalizedStrings : IDictionary<CultureInfo, string>
++    {
++        private readonly Dictionary<CultureInfo, string> _values;
++
++        internal LocalizedStrings()
++        {
++            _values = new Dictionary<CultureInfo, string>();
++        }
++
++        internal LocalizedStrings(string name)
++        {
++            _values = new Dictionary<CultureInfo, string>
++            {
++                [CultureInfo.InvariantCulture] = name
++            };
++        }
++
++        public string this[CultureInfo key]
++        {
++            get => _values[key];
++            set => throw new NotSupportedException();
++        }
++
++        public ICollection<CultureInfo> Keys => _values.Keys;
++
++        public ICollection<string> Values => _values.Values;
++
++        public int Count => _values.Count;
++
++        public bool IsReadOnly => true;
++
++        public void Add(CultureInfo key, string value)
++        {
++            throw new NotSupportedException();
++        }
++
++        public void Add(KeyValuePair<CultureInfo, string> item)
++        {
++            throw new NotSupportedException();
++        }
++
++        public void Clear()
++        {
++            throw new NotSupportedException();
++        }
++
++        public bool Contains(KeyValuePair<CultureInfo, string> item)
++        {
++            return _values.TryGetValue(item.Key, out string value) && value == item.Value;
++        }
++
++        public bool ContainsKey(CultureInfo key)
++        {
++            return _values.ContainsKey(key);
++        }
++
++        public void CopyTo(KeyValuePair<CultureInfo, string>[] array, int arrayIndex)
++        {
++            ((ICollection<KeyValuePair<CultureInfo, string>>)_values).CopyTo(array, arrayIndex);
++        }
++
++        public IEnumerator<KeyValuePair<CultureInfo, string>> GetEnumerator()
++        {
++            return _values.GetEnumerator();
++        }
++
++        public bool Remove(CultureInfo key)
++        {
++            throw new NotSupportedException();
++        }
++
++        public bool Remove(KeyValuePair<CultureInfo, string> item)
++        {
++            throw new NotSupportedException();
++        }
++
++        public bool TryGetValue(CultureInfo key, out string value)
++        {
++            return _values.TryGetValue(key, out value!);
++        }
++
++        IEnumerator IEnumerable.GetEnumerator()
++        {
++            return GetEnumerator();
++        }
++    }
++
++    internal class FontList : IEnumerable<Font>
++    {
++        private readonly List<Font> _fonts = [];
++
++        internal Font this[uint index] => _fonts[(int)index];
++
++        internal uint Count => (uint)_fonts.Count;
++
++        internal FontCollection FontsCollection { get; init; }
++
++        internal void Add(Font font)
++        {
++            _fonts.Add(font);
++        }
++
++        public IEnumerator<Font> GetEnumerator()
++        {
++            return _fonts.GetEnumerator();
++        }
++
++        IEnumerator IEnumerable.GetEnumerator()
++        {
++            return GetEnumerator();
++        }
++    }
++
++    internal sealed class FontFamily : FontList
++    {
++        internal FontFamily(string ordinalName, FontMetrics metrics)
++        {
++            OrdinalName = ordinalName;
++            FamilyNames = new LocalizedStrings(ordinalName);
++            Metrics = metrics;
++        }
++
++        internal LocalizedStrings FamilyNames { get; }
++
++        internal bool IsPhysical => true;
++
++        internal bool IsComposite => false;
++
++        internal string OrdinalName { get; }
++
++        internal FontMetrics Metrics { get; }
++
++        internal FontMetrics DisplayMetrics(float emSize, float pixelsPerDip)
++        {
++            _ = emSize;
++            _ = pixelsPerDip;
++            return Metrics;
++        }
++
++        internal Font GetFirstMatchingFont(FontWeight weight, FontStretch stretch, FontStyle style)
++        {
++            Font best = null;
++            int bestScore = int.MaxValue;
++            foreach (Font font in this)
++            {
++                int score = Math.Abs((int)font.Weight - (int)weight)
++                    + Math.Abs((int)font.Stretch - (int)stretch)
++                    + Math.Abs((int)font.Style - (int)style);
++                if (score < bestScore)
++                {
++                    bestScore = score;
++                    best = font;
++                }
++            }
++
++            return best ?? this[0];
++        }
++
++        internal FontList GetMatchingFonts(FontWeight weight, FontStretch stretch, FontStyle style)
++        {
++            var list = new FontList { FontsCollection = FontsCollection };
++            list.Add(GetFirstMatchingFont(weight, stretch, style));
++            return list;
++        }
++    }
++
++    internal sealed class Font
++    {
++        private readonly Factory _factory;
++        private readonly FontMatch _match;
++        private readonly Nova.FreeType.FontFace _native;
++        private FontFace _face;
++
++        internal Font(Factory factory, FontFamily family, FontMatch match, Nova.FreeType.FontFace native)
++        {
++            _factory = factory;
++            Family = family;
++            _match = match;
++            _native = native;
++            Weight = ToWeight(match.Weight);
++            Stretch = ToStretch(match.Width);
++            Style = ToStyle(match.Slant);
++            FaceNames = new LocalizedStrings(native.StyleName.Length > 0 ? native.StyleName : "Regular");
++            Metrics = FontFace.ToFontMetrics(native.Metrics);
++        }
++
++        internal FontFamily Family { get; }
++
++        internal FontWeight Weight { get; }
++
++        internal FontStretch Stretch { get; }
++
++        internal FontStyle Style { get; }
++
++        internal bool IsSymbolFont => false;
++
++        internal LocalizedStrings FaceNames { get; }
++
++        internal FontSimulations SimulationFlags => FontSimulations.None;
++
++        internal FontMetrics Metrics { get; }
++
++        internal double Version => 1.0;
++
++        internal IntPtr DWriteFontAddRef => _native.NativeFaceHandle;
++
++        internal FontMetrics DisplayMetrics(float emSize, float pixelsPerDip)
++        {
++            _ = emSize;
++            _ = pixelsPerDip;
++            return Metrics;
++        }
++
++        internal static void ResetFontFaceCache()
++        {
++        }
++
++        internal FontFace GetFontFace()
++        {
++            _face ??= new FontFace(_native, new Uri(_match.FilePath), (uint)_match.FaceIndex, FontSimulations.None, ownsNative: false);
++            return _face;
++        }
++
++        internal bool GetInformationalStrings(InformationalStringID informationalStringID, out LocalizedStrings informationalStrings)
++        {
++            informationalStrings = informationalStringID switch
++            {
++                InformationalStringID.WIN32FamilyNames or InformationalStringID.PreferredFamilyNames
++                    => new LocalizedStrings(_match.Family),
++                InformationalStringID.Win32SubFamilyNames or InformationalStringID.PreferredSubFamilyNames
++                    => FaceNames,
++                InformationalStringID.VersionStrings => new LocalizedStrings("1.0"),
++                _ => new LocalizedStrings()
++            };
++            return informationalStrings.Count > 0;
++        }
++
++        internal bool HasCharacter(uint unicodeValue)
++        {
++            return _native.GetGlyphIndex(unicodeValue) != 0;
++        }
++
++        internal static FontWeight ToWeight(int fontConfigWeight)
++        {
++            int dwrite = fontConfigWeight * 5;
++            if (dwrite < 150)
++            {
++                return FontWeight.Thin;
++            }
++
++            if (dwrite < 250)
++            {
++                return FontWeight.ExtraLight;
++            }
++
++            if (dwrite < 350)
++            {
++                return FontWeight.Light;
++            }
++
++            if (dwrite < 450)
++            {
++                return FontWeight.Normal;
++            }
++
++            if (dwrite < 550)
++            {
++                return FontWeight.Medium;
++            }
++
++            if (dwrite < 650)
++            {
++                return FontWeight.SemiBOLD;
++            }
++
++            if (dwrite < 750)
++            {
++                return FontWeight.Bold;
++            }
++
++            if (dwrite < 850)
++            {
++                return FontWeight.ExtraBold;
++            }
++
++            return FontWeight.Black;
++        }
++
++        internal static FontStretch ToStretch(int fontConfigWidth)
++        {
++            return fontConfigWidth switch
++            {
++                <= 50 => FontStretch.UltraCondensed,
++                <= 63 => FontStretch.ExtraCondensed,
++                <= 75 => FontStretch.Condensed,
++                <= 87 => FontStretch.SemiCondensed,
++                <= 112 => FontStretch.Normal,
++                <= 125 => FontStretch.SemiExpanded,
++                <= 150 => FontStretch.Expanded,
++                <= 175 => FontStretch.ExtraExpanded,
++                _ => FontStretch.UltraExpanded
++            };
++        }
++
++        internal static FontStyle ToStyle(int fontConfigSlant)
++        {
++            return fontConfigSlant switch
++            {
++                0 => FontStyle.Normal,
++                100 => FontStyle.Italic,
++                _ => FontStyle.Oblique
++            };
++        }
++    }
++
++    internal sealed class FontFace : IDisposable
++    {
++        private const uint Os2Tag = 0x322F534F;
++        private readonly Nova.FreeType.FontFace _native;
++        private readonly Uri _file;
++        private readonly bool _ownsNative;
++
++        internal unsafe FontFace(Native.IDWriteFontFace* fontFace)
++        {
++            _ = fontFace;
++            _native = null!;
++            _file = new Uri("file:///");
++        }
++
++        internal FontFace(Nova.FreeType.FontFace native, Uri file, uint index, FontSimulations simulations, bool ownsNative = true)
++        {
++            _native = native;
++            _file = file;
++            Index = index;
++            SimulationFlags = simulations;
++            _ownsNative = ownsNative;
++        }
++
++        internal Nova.FreeType.FontFace Native => _native;
++
++        internal FontFaceType Type => FontFaceType.TrueType;
++
++        internal uint Index { get; }
++
++        internal FontSimulations SimulationFlags { get; }
++
++        internal bool IsSymbolFont => false;
++
++        internal FontMetrics Metrics => ToFontMetrics(_native.Metrics);
++
++        internal ushort GlyphCount => _native.Metrics.GlyphCount;
++
++        internal IntPtr DWriteFontFaceAddRef => _native.NativeFaceHandle;
++
++        internal unsafe void* DWriteFontFaceNoAddRef => (void*)_native.NativeFaceHandle;
++
++        internal FontFile GetFileZero()
++        {
++            return new FontFile(_file);
++        }
++
++        internal void AddRef()
++        {
++        }
++
++        internal void Release()
++        {
++        }
++
++        internal unsafe void GetDesignGlyphMetrics(ushort* pGlyphIndices, uint glyphCount, GlyphMetrics* pGlyphMetrics)
++        {
++            for (uint i = 0; i < glyphCount; i++)
++            {
++                Nova.FreeType.GlyphMetrics metrics = _native.GetDesignMetrics(pGlyphIndices[i]);
++                pGlyphMetrics[i] = ToDWriteMetrics(metrics);
++            }
++        }
++
++        internal unsafe void GetDisplayGlyphMetrics(
++            ushort* pGlyphIndices,
++            uint glyphCount,
++            GlyphMetrics* pGlyphMetrics,
++            float emSize,
++            bool useDisplayNatural,
++            bool isSideways,
++            float pixelsPerDip)
++        {
++            _ = emSize;
++            _ = useDisplayNatural;
++            _ = isSideways;
++            _ = pixelsPerDip;
++            GetDesignGlyphMetrics(pGlyphIndices, glyphCount, pGlyphMetrics);
++        }
++
++        internal unsafe void GetArrayOfGlyphIndices(uint* pCodePoints, uint glyphCount, ushort* pGlyphIndices)
++        {
++            for (uint i = 0; i < glyphCount; i++)
++            {
++                pGlyphIndices[i] = (ushort)_native.GetGlyphIndex(pCodePoints[i]);
++            }
++        }
++
++        internal bool TryGetFontTable(OpenTypeTableTag openTypeTableTag, out byte[] tableData)
++        {
++            return _native.TryGetTable((uint)openTypeTableTag, out tableData);
++        }
++
++        internal bool ReadFontEmbeddingRights(out ushort fsType)
++        {
++            fsType = 0;
++            if (!_native.TryGetTable(Os2Tag, out byte[] table) || table.Length < 10)
++            {
++                return false;
++            }
++
++            fsType = (ushort)((table[8] << 8) | table[9]);
++            return true;
++        }
++
++        public void Dispose()
++        {
++            if (_ownsNative)
++            {
++                _native?.Dispose();
++            }
++        }
++
++        internal static FontMetrics ToFontMetrics(FontFaceMetrics metrics)
++        {
++            ushort units = (ushort)Math.Clamp(metrics.UnitsPerEm, 1, ushort.MaxValue);
++            return new FontMetrics
++            {
++                DesignUnitsPerEm = units,
++                Ascent = ToUShort(metrics.Ascent),
++                Descent = ToUShort(Math.Abs(metrics.Descent)),
++                LineGap = (short)Math.Clamp(metrics.LineGap, short.MinValue, short.MaxValue),
++                CapHeight = ToUShort(metrics.Ascent * 0.7),
++                XHeight = ToUShort(metrics.Ascent * 0.5),
++                UnderlinePosition = (short)(-units / 8),
++                UnderlineThickness = (ushort)Math.Max(1, units / 14),
++                StrikethroughPosition = ToShort(metrics.Ascent * 0.3),
++                StrikethroughThickness = (ushort)Math.Max(1, units / 14)
++            };
++        }
++
++        private static GlyphMetrics ToDWriteMetrics(Nova.FreeType.GlyphMetrics metrics)
++        {
++            int left = (int)Math.Round(metrics.Bounds.X);
++            int width = (int)Math.Round(metrics.Bounds.Width);
++            int height = (int)Math.Round(metrics.Bounds.Height);
++            int advanceWidth = (int)Math.Round(metrics.Advance.Width);
++            int advanceHeight = (int)Math.Round(metrics.Advance.Height);
++            int top = (int)Math.Round(metrics.Bounds.Y);
++            return new GlyphMetrics
++            {
++                LeftSideBearing = left,
++                AdvanceWidth = (uint)Math.Max(0, advanceWidth),
++                RightSideBearing = advanceWidth - left - width,
++                TopSideBearing = top,
++                AdvanceHeight = (uint)Math.Max(0, advanceHeight),
++                BottomSideBearing = advanceHeight - height - top,
++                VerticalOriginY = top + height
++            };
++        }
++
++        private static ushort ToUShort(double value)
++        {
++            return (ushort)Math.Clamp(Math.Round(value), 0, ushort.MaxValue);
++        }
++
++        private static short ToShort(double value)
++        {
++            return (short)Math.Clamp(Math.Round(value), short.MinValue, short.MaxValue);
++        }
++    }
++
++    internal sealed class FontFile : IDisposable
++    {
++        private readonly Uri _uri;
++
++        internal unsafe FontFile(Native.IDWriteFontFile* fontFile)
++        {
++            _ = fontFile;
++            _uri = new Uri("file:///");
++        }
++
++        internal FontFile(Uri uri)
++        {
++            _uri = uri;
++        }
++
++        internal unsafe void* DWriteFontFileNoAddRef => null;
++
++        internal bool Analyze(
++            out Native.DWRITE_FONT_FILE_TYPE dwriteFontFileType,
++            out Native.DWRITE_FONT_FACE_TYPE dwriteFontFaceType,
++            out uint numberOfFaces,
++            out int hr)
++        {
++            dwriteFontFileType = Native.DWRITE_FONT_FILE_TYPE.DWRITE_FONT_FILE_TYPE_TRUETYPE;
++            dwriteFontFaceType = Native.DWRITE_FONT_FACE_TYPE.DWRITE_FONT_FACE_TYPE_TRUETYPE;
++            numberOfFaces = 0;
++            hr = 0;
++
++            if (!_uri.IsFile)
++            {
++                hr = unchecked((int)0x88985000L);
++                return false;
++            }
++
++            string path = _uri.LocalPath;
++            if (Directory.Exists(path))
++            {
++                hr = unchecked((int)0x88985000L);
++                return false;
++            }
++
++            if (!File.Exists(path))
++            {
++                hr = unchecked((int)0x80070002);
++                return false;
++            }
++
++            numberOfFaces = 1;
++            return true;
++        }
++
++        internal unsafe bool Analyze(
++            out Native.DWRITE_FONT_FILE_TYPE dwriteFontFileType,
++            out Native.DWRITE_FONT_FACE_TYPE dwriteFontFaceType,
++            out uint numberOfFaces,
++            int* hr)
++        {
++            bool result = Analyze(out dwriteFontFileType, out dwriteFontFaceType, out numberOfFaces, out int code);
++            if (hr != null)
++            {
++                *hr = code;
++            }
++
++            return result;
++        }
++
++        internal string GetUriPath()
++        {
++            return _uri.IsFile ? _uri.LocalPath : _uri.AbsoluteUri;
++        }
++
++        public void Dispose()
++        {
++        }
++    }
++
++    internal sealed class FontCollection
++    {
++        private readonly Factory _factory;
++        private readonly List<FontFamily> _families = [];
++        private readonly Dictionary<string, uint> _indexByName = new(StringComparer.OrdinalIgnoreCase);
++
++        internal unsafe FontCollection(Native.IDWriteFontCollection* fontCollection)
++        {
++            _ = fontCollection;
++        }
++
++        private FontCollection(Factory factory)
++        {
++            _factory = factory;
++        }
++
++        internal uint FamilyCount => (uint)_families.Count;
++
++        internal FontFamily this[uint familyIndex] => _families[(int)familyIndex];
++
++        internal FontFamily this[string familyName]
++        {
++            get
++            {
++                return FindFamilyName(familyName, out uint index) ? _families[(int)index] : TryAddFamily(familyName);
++            }
++        }
++
++        internal bool FindFamilyName(string familyName, out uint index)
++        {
++            return _indexByName.TryGetValue(familyName, out index);
++        }
++
++        internal Font GetFontFromFontFace(FontFace fontFace)
++        {
++            string path = fontFace.GetFileZero().GetUriPath();
++            foreach (FontFamily family in _families)
++            {
++                foreach (Font font in family)
++                {
++                    if (string.Equals(font.GetFontFace().GetFileZero().GetUriPath(), path, StringComparison.OrdinalIgnoreCase)
++                        && font.GetFontFace().Index == fontFace.Index)
++                    {
++                        return font;
++                    }
++                }
++            }
++
++            return _families[0][0];
++        }
++
++        internal static FontCollection CreateSystem(Factory factory)
++        {
++            var collection = new FontCollection(factory);
++            Span<string> names = new string[2048];
++            int count = factory.FontConfig.ListFamilies(names);
++            for (int i = 0; i < count; i++)
++            {
++                string familyName = names[i];
++                try
++                {
++                    FontMatch match = factory.FontConfig.Match(new FontQuery(familyName));
++                    Nova.FreeType.FontFace native = factory.FreeType.OpenFace(match.FilePath, match.FaceIndex);
++                    FontMetrics metrics = FontFace.ToFontMetrics(native.Metrics);
++                    var family = new FontFamily(familyName, metrics) { FontsCollection = collection };
++                    family.Add(new Font(factory, family, match, native));
++                    collection.AddFamily(family);
++                }
++                catch (FontConfigException)
++                {
++                }
++                catch (FreeTypeException)
++                {
++                }
++            }
++
++            return collection;
++        }
++
++        internal static FontCollection CreateFromDirectory(Factory factory, string directory)
++        {
++            var collection = new FontCollection(factory);
++            foreach (string path in Directory.EnumerateFiles(directory))
++            {
++                string ext = Path.GetExtension(path);
++                if (!ext.Equals(".ttf", StringComparison.OrdinalIgnoreCase)
++                    && !ext.Equals(".otf", StringComparison.OrdinalIgnoreCase)
++                    && !ext.Equals(".ttc", StringComparison.OrdinalIgnoreCase))
++                {
++                    continue;
++                }
++
++                try
++                {
++                    Nova.FreeType.FontFace native = factory.FreeType.OpenFace(path, 0);
++                    var match = new FontMatch(native.FamilyName, path, 0, 80, 0, 100);
++                    FontFamily family = collection.FindFamilyName(native.FamilyName, out uint index)
++                        ? collection[index]
++                        : null;
++                    if (family == null)
++                    {
++                        family = new FontFamily(native.FamilyName, FontFace.ToFontMetrics(native.Metrics))
++                        {
++                            FontsCollection = collection
++                        };
++                        collection.AddFamily(family);
++                    }
++
++                    family.Add(new Font(factory, family, match, native));
++                }
++                catch (FreeTypeException)
++                {
++                }
++            }
++
++            return collection;
++        }
++
++        private void AddFamily(FontFamily family)
++        {
++            uint index = (uint)_families.Count;
++            _families.Add(family);
++            _indexByName[family.OrdinalName] = index;
++        }
++
++        private FontFamily TryAddFamily(string familyName)
++        {
++            if (_factory == null || string.IsNullOrEmpty(familyName))
++            {
++                return null;
++            }
++
++            try
++            {
++                FontMatch match = _factory.FontConfig.Match(new FontQuery(familyName));
++                Nova.FreeType.FontFace native = _factory.FreeType.OpenFace(match.FilePath, match.FaceIndex);
++                var family = new FontFamily(familyName, FontFace.ToFontMetrics(native.Metrics))
++                {
++                    FontsCollection = this
++                };
++                family.Add(new Font(_factory, family, match, native));
++                AddFamily(family);
++                return family;
++            }
++            catch (FontConfigException)
++            {
++                return null;
++            }
++            catch (FreeTypeException)
++            {
++                return null;
++            }
++        }
++    }
++
++    internal sealed class ItemProps
++    {
++        internal ItemProps()
++        {
++        }
++
++        internal void* NumberSubstitutionNoAddRef => null;
++
++        internal void* ScriptAnalysis => null;
++
++        internal CultureInfo DigitCulture { get; init; }
++
++        internal bool HasExtendedCharacter { get; init; }
++
++        internal bool NeedsCaretInfo { get; init; }
++
++        internal bool IsIndic { get; init; }
++
++        internal bool IsLatin { get; init; } = true;
++
++        internal bool HasCombiningMark { get; init; }
++
++        internal bool CanShapeTogether(ItemProps other)
++        {
++            return other is not null;
++        }
++
++        internal static ItemProps Create(
++            void* scriptAnalysis,
++            void* numberSubstitution,
++            CultureInfo digitCulture,
++            bool hasCombiningMark,
++            bool needsCaretInfo,
++            bool hasExtendedCharacter,
++            bool isIndic,
++            bool isLatin)
++        {
++            _ = scriptAnalysis;
++            _ = numberSubstitution;
++            return new ItemProps
++            {
++                DigitCulture = digitCulture,
++                HasCombiningMark = hasCombiningMark,
++                NeedsCaretInfo = needsCaretInfo,
++                HasExtendedCharacter = hasExtendedCharacter,
++                IsIndic = isIndic,
++                IsLatin = isLatin
++            };
++        }
++    }
++
++    internal sealed class TextAnalyzer
++    {
++        internal const char CharHyphen = '\x002d';
++
++        internal unsafe TextAnalyzer(Native.IDWriteTextAnalyzer* textAnalyzer)
++        {
++            _ = textAnalyzer;
++        }
++
++        internal TextAnalyzer(Factory factory)
++        {
++            Factory = factory;
++        }
++
++        internal Factory Factory { get; }
++
++        internal static unsafe IList<Span> Itemize(
++            char* text,
++            uint length,
++            CultureInfo culture,
++            Native.IDWriteFactory* pDWriteFactory,
++            bool isRightToLeftParagraph,
++            CultureInfo numberCulture,
++            bool ignoreUserOverride,
++            uint numberSubstitutionMethod,
++            IClassification classificationUtility,
++            CreateTextAnalysisSink pfnCreateTextAnalysisSink,
++            GetScriptAnalysisList pfnGetScriptAnalysisList,
++            GetNumberSubstitutionList pfnGetNumberSubstitutionList,
++            CreateTextAnalysisSource pfnCreateTextAnalysisSource)
++        {
++            _ = text;
++            _ = culture;
++            _ = pDWriteFactory;
++            _ = isRightToLeftParagraph;
++            _ = ignoreUserOverride;
++            _ = numberSubstitutionMethod;
++            _ = classificationUtility;
++            _ = pfnCreateTextAnalysisSink;
++            _ = pfnGetScriptAnalysisList;
++            _ = pfnGetNumberSubstitutionList;
++            _ = pfnCreateTextAnalysisSource;
++            return
++            [
++                new Span(
++                    ItemProps.Create(null, null, numberCulture, false, false, false, false, true),
++                    (int)length)
++            ];
++        }
++
++        internal unsafe void GetGlyphsAndTheirPlacements(
++            char* textString,
++            uint textLength,
++            Font font,
++            ushort blankGlyphIndex,
++            bool isSideways,
++            bool isRightToLeft,
++            CultureInfo cultureInfo,
++            DWriteFontFeature[][] features,
++            uint[] featureRangeLengths,
++            double fontEmSize,
++            double scalingFactor,
++            float pixelsPerDip,
++            TextFormattingMode textFormattingMode,
++            ItemProps itemProps,
++            out ushort[] clusterMap,
++            out ushort[] glyphIndices,
++            out int[] glyphAdvances,
++            out GlyphOffset[] glyphOffsets)
++        {
++            Shape(
++                textString,
++                textLength,
++                font,
++                isRightToLeft,
++                cultureInfo,
++                fontEmSize,
++                scalingFactor,
++                out clusterMap,
++                out glyphIndices,
++                out glyphAdvances,
++                out glyphOffsets);
++            _ = blankGlyphIndex;
++            _ = isSideways;
++            _ = features;
++            _ = featureRangeLengths;
++            _ = pixelsPerDip;
++            _ = textFormattingMode;
++            _ = itemProps;
++        }
++
++        internal unsafe void GetGlyphs(
++            char* textString,
++            uint textLength,
++            Font font,
++            ushort blankGlyphIndex,
++            bool isSideways,
++            bool isRightToLeft,
++            CultureInfo cultureInfo,
++            DWriteFontFeature[][] features,
++            uint[] featureRangeLengths,
++            uint maxGlyphCount,
++            TextFormattingMode textFormattingMode,
++            ItemProps itemProps,
++            ushort* clusterMap,
++            ushort* textProps,
++            ushort* glyphIndices,
++            uint* glyphProps,
++            int* pfCanGlyphAlone,
++            out uint actualGlyphCount)
++        {
++            _ = blankGlyphIndex;
++            _ = isSideways;
++            _ = features;
++            _ = featureRangeLengths;
++            _ = textFormattingMode;
++            _ = itemProps;
++            Shape(
++                textString,
++                textLength,
++                font,
++                isRightToLeft,
++                cultureInfo,
++                fontEmSize: 16,
++                scalingFactor: 1,
++                out ushort[] clusters,
++                out ushort[] glyphs,
++                out _,
++                out _);
++            actualGlyphCount = (uint)glyphs.Length;
++            if (actualGlyphCount > maxGlyphCount)
++            {
++                return;
++            }
++
++            for (int i = 0; i < clusters.Length && i < textLength; i++)
++            {
++                clusterMap[i] = clusters[i];
++                if (textProps != null)
++                {
++                    textProps[i] = 0;
++                }
++            }
++
++            for (int i = 0; i < glyphs.Length; i++)
++            {
++                glyphIndices[i] = glyphs[i];
++                if (glyphProps != null)
++                {
++                    glyphProps[i] = 0;
++                }
++
++                if (pfCanGlyphAlone != null)
++                {
++                    pfCanGlyphAlone[i] = 1;
++                }
++            }
++        }
++
++        internal unsafe void GetGlyphPlacements(
++            char* textString,
++            ushort* clusterMap,
++            ushort* textProps,
++            uint textLength,
++            ushort* glyphIndices,
++            uint* glyphProps,
++            uint glyphCount,
++            Font font,
++            double fontEmSize,
++            double scalingFactor,
++            bool isSideways,
++            bool isRightToLeft,
++            CultureInfo cultureInfo,
++            DWriteFontFeature[][] features,
++            uint[] featureRangeLengths,
++            TextFormattingMode textFormattingMode,
++            ItemProps itemProps,
++            float pixelsPerDip,
++            int* glyphAdvances,
++            out GlyphOffset[] glyphOffsets)
++        {
++            _ = clusterMap;
++            _ = textProps;
++            _ = glyphIndices;
++            _ = glyphProps;
++            _ = glyphCount;
++            _ = isSideways;
++            _ = features;
++            _ = featureRangeLengths;
++            _ = textFormattingMode;
++            _ = itemProps;
++            _ = pixelsPerDip;
++            Shape(
++                textString,
++                textLength,
++                font,
++                isRightToLeft,
++                cultureInfo,
++                fontEmSize,
++                scalingFactor,
++                out _,
++                out _,
++                out int[] advances,
++                out glyphOffsets);
++            for (int i = 0; i < advances.Length; i++)
++            {
++                glyphAdvances[i] = advances[i];
++            }
++        }
++
++        private static unsafe void Shape(
++            char* textString,
++            uint textLength,
++            Font font,
++            bool isRightToLeft,
++            CultureInfo cultureInfo,
++            double fontEmSize,
++            double scalingFactor,
++            out ushort[] clusterMap,
++            out ushort[] glyphIndices,
++            out int[] glyphAdvances,
++            out GlyphOffset[] glyphOffsets)
++        {
++            var text = new string(textString, 0, (int)textLength);
++            FontFace face = font.GetFontFace();
++            Nova.FreeType.FontFace native = face.Native;
++            native.SetPixelSize(fontEmSize > 0 ? fontEmSize : 16);
++            using var shaper = new HarfBuzzShaper(native);
++            string language = cultureInfo?.TwoLetterISOLanguageName ?? "en";
++            var options = new ShapeOptions(language, "Latn", isRightToLeft);
++            Span<ShapedGlyph> shaped = text.Length <= 1024
++                ? stackalloc ShapedGlyph[1024]
++                : new ShapedGlyph[text.Length * 2];
++            int count = shaper.Shape(text, options, shaped);
++            clusterMap = new ushort[text.Length];
++            glyphIndices = new ushort[count];
++            glyphAdvances = new int[count];
++            glyphOffsets = new GlyphOffset[count];
++            double scale = scalingFactor <= 0 ? 1 : scalingFactor;
++            for (int i = 0; i < count; i++)
++            {
++                ShapedGlyph item = shaped[i];
++                glyphIndices[i] = (ushort)item.GlyphIndex;
++                glyphAdvances[i] = (int)Math.Round(item.Advance.Width * scale);
++                glyphOffsets[i] = new GlyphOffset
++                {
++                    du = (int)Math.Round(item.Offset.X * scale),
++                    dv = (int)Math.Round(item.Offset.Y * scale)
++                };
++                int cluster = (int)Math.Min(item.Cluster, (uint)Math.Max(0, text.Length - 1));
++                if (cluster < clusterMap.Length)
++                {
++                    clusterMap[cluster] = (ushort)i;
++                }
++            }
++
++            ushort last = 0;
++            for (int i = 0; i < clusterMap.Length; i++)
++            {
++                if (i > 0 && clusterMap[i] == 0 && last != 0)
++                {
++                    clusterMap[i] = last;
++                }
++                else if (clusterMap[i] != 0 || i == 0)
++                {
++                    last = clusterMap[i];
++                }
++            }
++        }
++    }
++}

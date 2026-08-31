@@ -1,0 +1,219 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj b/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj
+index 151186a..ea83da2 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj
+@@ -1403,6 +1403,7 @@
+     <ProjectReference Include="..\..\..\..\..\..\src\Nova.FontConfig\Nova.FontConfig.csproj" />
+     <ProjectReference Include="..\..\..\..\..\..\src\Nova.FreeType\Nova.FreeType.csproj" />
+     <ProjectReference Include="..\..\..\..\..\..\src\Nova.HarfBuzz\Nova.HarfBuzz.csproj" />
++    <ProjectReference Include="..\..\..\..\..\..\src\Nova.Sdl\Nova.Sdl.csproj" />
+     <ProjectReference Include="$(WpfSourceDir)System.Xaml\System.Xaml.csproj" />
+     <ProjectReference Include="$(WpfSourceDir)System.Windows.Input.Manipulations\System.Windows.Input.Manipulations.csproj" />
+     <ProjectReference Include="$(WpfSourceDir)System.Windows.Primitives\System.Windows.Primitives.csproj" />
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/clipboard.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/clipboard.cs
+index b7a5f4d..88de6bb 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/clipboard.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/clipboard.cs
+@@ -21,7 +21,21 @@ public static class Clipboard
+     /// <summary>
+     ///  Clear the system clipboard.
+     /// </summary>
+-    public static void Clear() => ClipboardCore.Clear().ThrowOnFailure();
++    public static void Clear()
++    {
++        if (!OperatingSystem.IsWindows())
++        {
++            Nova.Sdl.SdlHost.SetClipboardText(string.Empty);
++            return;
++        }
++
++        ClearCore();
++    }
++
++    private static void ClearCore()
++    {
++        ClipboardCore.Clear().ThrowOnFailure();
++    }
+ 
+     /// <summary>
+     ///  Return <see langword="true"/> if Clipboard contains the audio data. Otherwise, return <see langword="false"/>.
+@@ -64,7 +78,20 @@ public static bool ContainsText(TextDataFormat format) => !DataFormats.IsValidTe
+     /// <summary>
+     ///  Permanently renders the contents of the last IDataObject that was set onto the clipboard.
+     /// </summary>
+-    public static void Flush() => ClipboardCore.Flush().ThrowOnFailure();
++    public static void Flush()
++    {
++        if (!OperatingSystem.IsWindows())
++        {
++            return; // SDL has no flush concept: the text is stored on set.
++        }
++
++        FlushCore();
++    }
++
++    private static void FlushCore()
++    {
++        ClipboardCore.Flush().ThrowOnFailure();
++    }
+ 
+     /// <summary>
+     ///  Get audio data as Stream from Clipboard.
+@@ -131,6 +158,11 @@ public static string GetText(TextDataFormat format)
+             throw new InvalidEnumArgumentException(nameof(format), (int)format, typeof(TextDataFormat));
+         }
+ 
++        if (!OperatingSystem.IsWindows())
++        {
++            return Nova.Sdl.SdlHost.GetClipboardText();
++        }
++
+         return GetTypedDataIfAvailable<string>(DataFormats.ConvertToDataFormats(format)) is string text
+             ? text
+             : string.Empty;
+@@ -167,7 +199,20 @@ public static void SetData(string format, object data)
+     /// <summary>
+     ///  Set the file drop list to Clipboard.
+     /// </summary>
+-    public static void SetFileDropList(StringCollection fileDropList) => ClipboardCore.SetFileDropList(fileDropList);
++    public static void SetFileDropList(StringCollection fileDropList)
++    {
++        if (!OperatingSystem.IsWindows())
++        {
++            return; // file-drop payloads have no SDL clipboard form.
++        }
++
++        SetFileDropListCore(fileDropList);
++    }
++
++    private static void SetFileDropListCore(StringCollection fileDropList)
++    {
++        ClipboardCore.SetFileDropList(fileDropList);
++    }
+ 
+     /// <summary>
+     ///  Set the image data to Clipboard.
+@@ -199,6 +244,12 @@ public static void SetText(string text, TextDataFormat format)
+             throw new InvalidEnumArgumentException(nameof(format), (int)format, typeof(TextDataFormat));
+         }
+ 
++        if (!OperatingSystem.IsWindows())
++        {
++            Nova.Sdl.SdlHost.SetClipboardText(text);
++            return;
++        }
++
+         SetDataInternal(DataFormats.ConvertToDataFormats(format), text);
+     }
+ 
+@@ -206,6 +257,18 @@ public static void SetText(string text, TextDataFormat format)
+     ///  Retrieves the data object that is currently on the system clipboard.
+     /// </summary>
+     public static IDataObject? GetDataObject()
++    {
++        if (!OperatingSystem.IsWindows())
++        {
++            // The OLE DataObject (and its ClipboardCore backing) has no Linux host;
++            // the text entry points read the SDL clipboard directly instead.
++            return null;
++        }
++
++        return GetDataObjectCore();
++    }
++
++    private static IDataObject? GetDataObjectCore()
+     {
+         ClipboardCore.GetDataObject<DataObject, IDataObject>(out IDataObject? dataObject).ThrowOnFailure();
+         return dataObject;
+@@ -222,6 +285,11 @@ public static void SetText(string text, TextDataFormat format)
+     public static bool IsCurrent(IDataObject data)
+     {
+         ArgumentNullException.ThrowIfNull(data);
++        return !OperatingSystem.IsWindows() || IsCurrentCore(data);
++    }
++
++    private static bool IsCurrentCore(IDataObject data)
++    {
+         return ClipboardCore.IsObjectOnClipboard(data);
+     }
+ 
+@@ -251,29 +319,74 @@ public static void SetDataObject(object data, bool copy)
+     {
+         ArgumentNullException.ThrowIfNull(data);
+ 
++        if (!OperatingSystem.IsWindows())
++        {
++            // The OLE DataObject (and ClipboardCore) has no Linux host; a plain string
++            // payload goes straight to the SDL clipboard, other formats are ignored.
++            if (data is string text)
++            {
++                Nova.Sdl.SdlHost.SetClipboardText(text);
++            }
++
++            return;
++        }
++
+         // Wrap if we're not already a DataObject
+         DataObject dataObject = data as DataObject ?? DataObject.CreateFromClipboard(data);
++        SetDataObjectCore(dataObject, copy);
++    }
++
++    private static void SetDataObjectCore(DataObject dataObject, bool copy)
++    {
+         ClipboardCore.SetData(dataObject, copy).ThrowOnFailure();
+     }
+ 
+     /// <summary>
+     ///  Query the specified data format from Clipboard.
+     /// </summary>
+-    private static bool ContainsDataInternal(string format) =>
+-        GetDataObject() is { } dataObject && dataObject.GetDataPresent(format, IsDataFormatAutoConvert(format));
++    private static bool ContainsDataInternal(string format)
++    {
++        if (!OperatingSystem.IsWindows())
++        {
++            return (format == DataFormats.UnicodeText || format == DataFormats.Text)
++                && Nova.Sdl.SdlHost.GetClipboardText().Length > 0;
++        }
++
++        return GetDataObject() is { } dataObject && dataObject.GetDataPresent(format, IsDataFormatAutoConvert(format));
++    }
+ 
+     /// <summary>
+     ///  Get the specified format from Clipboard.
+     /// </summary>
+-    private static object? GetDataInternal(string format) => GetDataObject() is { } dataObject
+-        ? dataObject.GetData(format, IsDataFormatAutoConvert(format))
+-        : null;
++    private static object? GetDataInternal(string format)
++    {
++        if (!OperatingSystem.IsWindows())
++        {
++            return format == DataFormats.UnicodeText || format == DataFormats.Text
++                ? Nova.Sdl.SdlHost.GetClipboardText()
++                : null;
++        }
++
++        return GetDataObject() is { } dataObject
++            ? dataObject.GetData(format, IsDataFormatAutoConvert(format))
++            : null;
++    }
+ 
+     /// <summary>
+     ///  Set the specified data into Clipboard.
+     /// </summary>
+     private static void SetDataInternal(string format, object data)
+     {
++        if (!OperatingSystem.IsWindows())
++        {
++            if (data is string text && (format == DataFormats.UnicodeText || format == DataFormats.Text))
++            {
++                Nova.Sdl.SdlHost.SetClipboardText(text);
++            }
++
++            return;
++        }
++
+         DataObject dataObject = new();
+         dataObject.SetData(format, data, IsDataFormatAutoConvert(format));
+         SetDataObject(dataObject, copy: true);

@@ -1,0 +1,188 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapDownload.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapDownload.cs
+index 84c8b59..4f1d706 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapDownload.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapDownload.cs
+@@ -1,14 +1,16 @@
+-﻿// Licensed to the .NET Foundation under one or more agreements.
++// Licensed to the .NET Foundation under one or more agreements.
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+ using System.IO;
+ using System.Collections;
+ using System.ComponentModel;
+ using System.Threading;
++using System.Threading.Tasks;
+ using System.Windows.Threading;
+ using MS.Internal;
+ using System.Net;
+ using System.Net.Cache;
++using System.Net.Http;
+ using System.Text;
+ using MS.Win32;
+ using Microsoft.Win32.SafeHandles;
+@@ -126,40 +128,64 @@ Stream stream
+             entry.inputUri = uri;
+             entry.inputStream = stream;
+ 
+-            string cacheFolder = MS.Win32.WinInet.InternetCacheFolder.LocalPath;
+             bool passed = false;
+ 
+-            // Get the file path 
+-            StringBuilder tmpFileName = new StringBuilder(NativeMethods.MAX_PATH);
+-            MS.Win32.UnsafeNativeMethods.GetTempFileName(cacheFolder, "WPF", 0, tmpFileName);
+-              
+-            try
++            if (!OperatingSystem.IsWindows())
+             {
+-                string pathToUse = tmpFileName.ToString();
+-                SafeFileHandle fileHandle = MS.Win32.UnsafeNativeMethods.CreateFile(
+-                    pathToUse,
+-                    dwDesiredAccess: NativeMethods.GENERIC_READ | NativeMethods.GENERIC_WRITE,
+-                    dwShareMode: 0,
+-                    lpSecurityAttributes: null,
+-                    dwCreationDisposition: NativeMethods.CREATE_ALWAYS,
+-                    dwFlagsAndAttributes: NativeMethods.FILE_ATTRIBUTE_TEMPORARY | NativeMethods.FILE_FLAG_DELETE_ON_CLOSE,
+-                    hTemplateFile: IntPtr.Zero
+-                    );
+-
+-                if (fileHandle.IsInvalid)
++                // Linux: the WinInet cache folder and the kernel32 temp-file APIs have
++                // no host. A managed temp file with delete-on-close mirrors the Win32
++                // semantics (FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE).
++                try
++                {
++                    string tempPath = System.IO.Path.GetTempFileName();
++                    entry.outputStream = new FileStream(tempPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, 4096, FileOptions.DeleteOnClose);
++                    entry.streamPath = tempPath;
++                    passed = true;
++                }
++                catch (Exception e)
+                 {
+-                    throw new Win32Exception();
++                    if (CriticalExceptions.IsCriticalException(e))
++                    {
++                        throw;
++                    }
+                 }
+-                    
+-                entry.outputStream = new FileStream(fileHandle, FileAccess.ReadWrite);
+-                entry.streamPath = pathToUse;
+-                passed = true;
+             }
+-            catch(Exception e)
++            else
+             {
+-                if (CriticalExceptions.IsCriticalException(e))
++                string cacheFolder = MS.Win32.WinInet.InternetCacheFolder.LocalPath;
++
++                // Get the file path 
++                StringBuilder tmpFileName = new StringBuilder(NativeMethods.MAX_PATH);
++                MS.Win32.UnsafeNativeMethods.GetTempFileName(cacheFolder, "WPF", 0, tmpFileName);
++
++                try
+                 {
+-                    throw;
++                    string pathToUse = tmpFileName.ToString();
++                    SafeFileHandle fileHandle = MS.Win32.UnsafeNativeMethods.CreateFile(
++                        pathToUse,
++                        dwDesiredAccess: NativeMethods.GENERIC_READ | NativeMethods.GENERIC_WRITE,
++                        dwShareMode: 0,
++                        lpSecurityAttributes: null,
++                        dwCreationDisposition: NativeMethods.CREATE_ALWAYS,
++                        dwFlagsAndAttributes: NativeMethods.FILE_ATTRIBUTE_TEMPORARY | NativeMethods.FILE_FLAG_DELETE_ON_CLOSE,
++                        hTemplateFile: IntPtr.Zero
++                        );
++
++                    if (fileHandle.IsInvalid)
++                    {
++                        throw new Win32Exception();
++                    }
++
++                    entry.outputStream = new FileStream(fileHandle, FileAccess.ReadWrite);
++                    entry.streamPath = pathToUse;
++                    passed = true;
++                }
++                catch (Exception e)
++                {
++                    if (CriticalExceptions.IsCriticalException(e))
++                    {
++                        throw;
++                    }
+                 }
+             }
+ 
+@@ -184,13 +210,20 @@ Stream stream
+ 
+             if (stream == null)
+             {
+-                entry.webRequest = WpfWebRequestHelper.CreateRequest(uri);
+-                if (uriCachePolicy != null)
++                if (!OperatingSystem.IsWindows())
+                 {
+-                    entry.webRequest.CachePolicy = uriCachePolicy;
++                    BeginDownloadLinux(entry, uri);
+                 }
++                else
++                {
++                    entry.webRequest = WpfWebRequestHelper.CreateRequest(uri);
++                    if (uriCachePolicy != null)
++                    {
++                        entry.webRequest.CachePolicy = uriCachePolicy;
++                    }
+ 
+-                entry.webRequest.BeginGetResponse(_responseCallback, entry);
++                    entry.webRequest.BeginGetResponse(_responseCallback, entry);
++                }
+             }
+             else
+             {
+@@ -200,6 +233,49 @@ Stream stream
+             }
+         }
+ 
++        /// <summary>
++        ///  The SDL-runtime download path: the body is streamed with HttpClient
++        ///  (GetStreamAsync — the response is not buffered; it returns after the headers)
++        ///  into the managed delete-on-close temp file created in BeginDownload. Redirects
++        ///  are followed: the Win32 path goes through HttpWebRequest, whose
++        ///  AllowAutoRedirect defaults to true and is never overridden in
++        ///  WpfWebRequestHelper, and SocketsHttpHandler defaults match (50 hops). The
++        ///  uriCachePolicy is a WinInet-cache concept with no Linux counterpart and is
++        ///  ignored here.
++        /// </summary>
++        private static void BeginDownloadLinux(QueueEntry entry, Uri uri)
++        {
++            _ = Task.Run(async () =>
++            {
++                try
++                {
++                    entry.inputStream = await s_httpClient.GetStreamAsync(uri).ConfigureAwait(false);
++                    entry.contentLength = -1;
++                    entry.contentType = string.Empty;
++                    _workQueue.Enqueue(entry);
++                    _waitEvent.Set();
++                }
++                catch (Exception e)
++                {
++                    MarshalException(entry, e);
++                }
++            });
++        }
++
++        /// <summary>
++        ///  The shared HttpClient for the SDL-runtime download path. AllowAutoRedirect is
++        ///  explicit for the HttpWebRequest parity documented on
++        ///  <see cref="BeginDownloadLinux"/>; AutomaticDecompression stays off like
++        ///  HttpWebRequest (WPF never enables it); the timeout stays at the handler
++        ///  default (no overall cap), matching the stream-read semantics of the Win32
++        ///  path's ReadWriteTimeout window rather than cutting large downloads short.
++        /// </summary>
++        private static readonly HttpClient s_httpClient = new(new SocketsHttpHandler
++        {
++            AllowAutoRedirect = true,
++            AutomaticDecompression = DecompressionMethods.None,
++        });
++
+         ///
+         /// Thread Proc
+         ///

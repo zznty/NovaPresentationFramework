@@ -1,0 +1,79 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAotCompatible>false</IsAotCompatible>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- WPF0001: upstream [Experimental] ThemeMode API, deliberately exercised by the
+         Fluent-theme probes (the task's acceptance surface). Dev tool only. -->
+    <NoWarn>$(NoWarn);WPF0001</NoWarn>
+    <Description>Dev-only control-coverage probe. Per-control process isolation (see Program.cs). Not in slnx (NU1201).</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Nova.SdlSource\Nova.SdlSource.csproj" />
+    <ProjectReference Include="..\..\src\Nova.DesktopTheme\Nova.DesktopTheme.csproj" />
+    <ProjectReference Include="..\..\src\Nova.DesktopTheme.Host\Nova.DesktopTheme.Host.csproj" />
+    <ProjectReference Include="..\..\src\Nova.Classification\Nova.Classification.csproj" />
+    <ProjectReference Include="..\..\third_party/dotnet-wpf/src/Microsoft.DotNet.Wpf/src/PresentationFramework/PresentationFramework.csproj">
+      <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+    </ProjectReference>
+    <Reference Include="PresentationFramework">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\PresentationFramework\Debug\$(TargetFramework)\PresentationFramework.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PresentationCore">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\PresentationCore\Debug\$(TargetFramework)\PresentationCore.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="WindowsBase">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\WindowsBase\Debug\$(TargetFramework)\WindowsBase.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="System.Xaml">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\System.Xaml\Debug\$(TargetFramework)\System.Xaml.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="UIAutomationTypes">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\UIAutomationTypes\Debug\$(TargetFramework)\UIAutomationTypes.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="UIAutomationProvider">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\UIAutomationProvider\Debug\$(TargetFramework)\UIAutomationProvider.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PresentationFramework.Classic">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\PresentationFramework.Classic\Debug\$(TargetFramework)\PresentationFramework.Classic.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PresentationFramework.Aero2">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\PresentationFramework.Aero2\Debug\$(TargetFramework)\PresentationFramework.Aero2.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PresentationFramework.Fluent">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\PresentationFramework.Fluent\Debug\$(TargetFramework)\PresentationFramework.Fluent.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PresentationUI">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\PresentationUI\Debug\$(TargetFramework)\PresentationUI.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <None Include="..\..\fonts\NovaFluentIcons.ttf" Link="fonts\NovaFluentIcons.ttf" CopyToOutputDirectory="PreserveNewest" />
+    <DefaultReferenceExclusion Include="WindowsBase;System.Xaml" />
+    <PackageReference Include="System.Windows.Extensions" />
+    <None Include="..\..\tests\Nova.DesktopTheme.Tests\fixtures\**" Link="detheme-fixtures\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="FilterImplicitAssemblyReferences"
+          AfterTargets="ResolveTargetingPackAssets"
+          BeforeTargets="_HandlePackageFileConflicts;ResolveAssemblyReferences">
+    <ItemGroup>
+      <_referenceExclusion Include="@(DefaultReferenceExclusion)">
+        <AssemblyName>%(DefaultReferenceExclusion.Identity)</AssemblyName>
+        <ExternallyResolved>true</ExternallyResolved>
+      </_referenceExclusion>
+      <Reference Remove="@(_referenceExclusion)" MatchOnMetadata="AssemblyName;ExternallyResolved" />
+    </ItemGroup>
+  </Target>
+</Project>

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Managed line-breaking and layout services.</Description>
+    <RootNamespace>Nova.LineServices</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Nova.Classification\Nova.Classification.csproj" />
+  </ItemGroup>
+</Project>

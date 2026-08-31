@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Nova.Mil\Nova.Mil.csproj" />
+    <ProjectReference Include="..\..\src\Nova.MilCmd\Nova.MilCmd.csproj" />
+    <ProjectReference Include="..\..\src\Nova.Text\Nova.Text.csproj" />
+    <ProjectReference Include="..\..\src\Nova.Vulkan\Nova.Vulkan.csproj" />
+    <ProjectReference Include="..\..\src\Nova.Geometry\Nova.Geometry.csproj" />
+    <Compile Include="..\NovaTestVulkan.cs" Link="NovaTestVulkan.cs" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,53 @@
+<Project>
+
+  <!--
+    Nova.PresentationFramework buildTransitive props (imported by NuGet for
+    direct AND transitive consumers). Sets the bundled PresentationBuildTasks
+    assembly path and reproduces the stock WPF default-item globbing
+    (**/*.xaml -> Page, App.xaml -> ApplicationDefinition) that the
+    WindowsDesktop SDK normally performs under UseWPF=true. We deliberately do
+    NOT set UseWPF: it fails on Linux (NETSDK1136 / NETSDK1100 + zero
+    WindowsDesktop packs) and the bundle rejects FrameworkReference.
+  -->
+
+  <PropertyGroup>
+    <NovaPresentationFrameworkPropsImported>true</NovaPresentationFrameworkPropsImported>
+    <!--
+      The bundled PresentationBuildTasks.dll (tools/net11.0) is built for the
+      net11 BCL (System.Runtime 11.0.0.0); only net11.0 consumers get it pinned.
+      net10.0 consumers leave _PresentationBuildTasksAssembly empty so the
+      consumer SDK's Microsoft.WinFX.targets fills it with its own
+      TFM-matched task dll ($(MSBuildSDKsPath)\...\tools\$(_PresentationBuildTasksTfm)\
+      PresentationBuildTasks.dll) — the 10 GA SDK's MSBuild runs on the net10
+      runtime and cannot load an 11.0.0.0-System.Runtime task dll (MSB4062).
+    -->
+    <_PresentationBuildTasksAssembly Condition="'$(_PresentationBuildTasksAssembly)'=='' And '$(TargetFramework)' == 'net11.0'">$([MSBuild]::Unescape($([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\tools\net11.0\PresentationBuildTasks.dll'))))</_PresentationBuildTasksAssembly>
+    <EnableDefaultPageItems Condition="'$(EnableDefaultPageItems)' == ''">true</EnableDefaultPageItems>
+    <EnableDefaultApplicationDefinition Condition="'$(EnableDefaultApplicationDefinition)' == ''">true</EnableDefaultApplicationDefinition>
+    <DefaultXamlRuntime Condition="'$(DefaultXamlRuntime)'==''">Wpf</DefaultXamlRuntime>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup Condition=" '$(EnableDefaultItems)' == 'true' ">
+    <ApplicationDefinition>
+      <Generator>MSBuild:Compile</Generator>
+      <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+      <SubType>Designer</SubType>
+    </ApplicationDefinition>
+    <Page>
+      <Generator>MSBuild:Compile</Generator>
+      <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+      <SubType>Designer</SubType>
+    </Page>
+  </ItemDefinitionGroup>
+
+  <ItemGroup Condition=" '$(EnableDefaultItems)' == 'true' ">
+    <ApplicationDefinition Include="App.xaml"
+                           Condition="'$(EnableDefaultApplicationDefinition)' != 'false' And Exists('$(MSBuildProjectDirectory)/App.xaml') And '$(MSBuildProjectExtension)' == '.csproj'" />
+    <Page Include="**/*.xaml"
+          Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder);@(ApplicationDefinition)"
+          Condition="'$(EnableDefaultPageItems)' != 'false'" />
+    <None Remove="**/*.xaml"
+          Condition="'$(EnableDefaultApplicationDefinition)' != 'false' And '$(EnableDefaultPageItems)' != 'false'" />
+  </ItemGroup>
+
+</Project>

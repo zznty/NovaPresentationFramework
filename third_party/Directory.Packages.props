@@ -1,0 +1,10 @@
+<Project>
+  <!--
+    NuGet walks up from third_party/dotnet-wpf looking for Directory.Packages.props.
+    The repo root enables Central Package Management, which NU1008s Arcade
+    PackageReference items that still carry Version=. WPF is not CPM.
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>

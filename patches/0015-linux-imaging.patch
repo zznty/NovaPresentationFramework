@@ -1,0 +1,688 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj b/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj
+index d01ab60..151186a 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj
+@@ -1425,6 +1425,10 @@
+     <ProjectReference Include="..\..\..\..\..\..\src\Nova.LineServices\Nova.LineServices.csproj" />
+   </ItemGroup>
+ 
++  <ItemGroup>
++    <ProjectReference Include="..\..\..\..\..\..\src\Nova.Imaging\Nova.Imaging.csproj" />
++  </ItemGroup>
++
+   <ItemGroup>
+     <MicrosoftPrivateWinFormsReference Include="System.Private.Windows.Core" />
+   </ItemGroup>
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapDecoder.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapDecoder.cs
+index 5730389..6e9cc86 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapDecoder.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/Imaging/BitmapDecoder.cs
+@@ -1101,6 +1101,36 @@ out SafeFileHandle safeFilehandle
+             // Make sure we always use a seekable stream to avoid problems with http Uris etc.
+             stream = GetSeekableStream(stream);
+ 
++            if (!OperatingSystem.IsWindows())
++            {
++                // Linux: decode the whole stream with Nova.Imaging (ImageSharp) and return a
++                // managed decoder token. The image is fully decoded here, so no lazy uriStream /
++                // unmanagedMemoryStream / file handle is kept; the out params stay null and the
++                // caller suppresses the finalizer. clsId is derived from the container format so
++                // CreateFromUriOrStream picks the right BitmapDecoder subclass.
++                try
++                {
++                    int hr = Nova.Imaging.ManagedWicCodec.CreateDecoder(stream, out nint decoderToken, out Nova.Imaging.WicContainerFormat containerFormat);
++                    if (hr != 0)
++                    {
++                        bitmapStream?.Close();
++                        throw new System.IO.InvalidDataException(SR.Image_CantDealWithStream);
++                    }
++
++                    clsId = ContainerFormatToGuid(containerFormat);
++                    isOriginalWritable = false;
++                    uriStream = null;
++                    unmanagedMemoryStream = null;
++                    safeFilehandle = null;
++                    return new SafeMILHandle(decoderToken);
++                }
++                catch
++                {
++                    bitmapStream?.Close();
++                    throw;
++                }
++            }
++
+             if (stream is UnmanagedMemoryStream)
+             {
+                 unmanagedMemoryStream = stream as UnmanagedMemoryStream;
+@@ -1332,6 +1362,29 @@ private static System.IO.Stream GetSeekableStream(System.IO.Stream bitmapStream)
+         }
+ 
+         /// Check the cache to see if decoder already exists
++
++        /// <summary>
++        /// Maps the ImageSharp container format to the WPF container-format GUID so
++        /// <see cref="CreateFromUriOrStream"/> selects the correct BitmapDecoder subclass.
++        /// Formats ImageSharp supports but WPF has no container GUID for map to Guid.Empty
++        /// (the UnknownBitmapDecoder path, which still works because the pixels are already
++        /// decoded in memory).
++        /// </summary>
++        private static Guid ContainerFormatToGuid(Nova.Imaging.WicContainerFormat containerFormat)
++        {
++            return containerFormat switch
++            {
++                Nova.Imaging.WicContainerFormat.Bmp => MILGuidData.GUID_ContainerFormatBmp,
++                Nova.Imaging.WicContainerFormat.Gif => MILGuidData.GUID_ContainerFormatGif,
++                Nova.Imaging.WicContainerFormat.Ico => MILGuidData.GUID_ContainerFormatIco,
++                Nova.Imaging.WicContainerFormat.Jpeg => MILGuidData.GUID_ContainerFormatJpeg,
++                Nova.Imaging.WicContainerFormat.Png => MILGuidData.GUID_ContainerFormatPng,
++                Nova.Imaging.WicContainerFormat.Tiff => MILGuidData.GUID_ContainerFormatTiff,
++                Nova.Imaging.WicContainerFormat.Wmp => MILGuidData.GUID_ContainerFormatWmp,
++                _ => Guid.Empty
++            };
++        }
++
+         private static BitmapDecoder CheckCache(
+             Uri uri,
+             out Guid clsId
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/UnsafeNativeMethodsMilCoreApi.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/UnsafeNativeMethodsMilCoreApi.cs
+index c889fc9..6db7a43 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/UnsafeNativeMethodsMilCoreApi.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/UnsafeNativeMethodsMilCoreApi.cs
+@@ -414,12 +414,20 @@ internal static unsafe int CreateCWICWrapperBitmap(
+             {
+                 if (!OperatingSystem.IsWindows())
+                 {
+-                    // Imaging is deferred on this host. This is the DUCE-side gate
+-                    // (BitmapSource.DUCECompatiblePtr): no bitmap can have been
+-                    // decoded (the WIC/MIL factories above threw first), so a
+-                    // bitmap that reaches the render graph is impossible today.
+-                    // Throw the same clear catchable exception as the factories.
+-                    throw new PlatformNotSupportedException("imaging is not yet implemented on this host");
++                    // Linux: no milcore CWICWrapperBitmap. The in-process bitmap token IS
++                    // already renderable by the managed slave, so "wrap" = bump the refcount
++                    // and hand back the same token; the DUCE transport resolves it via
++                    // Nova.Imaging.WicHandleTable.
++                    nint token = pIWICBitmapSource is null ? 0 : pIWICBitmapSource.DangerousGetHandle();
++                    if (token == 0)
++                    {
++                        pCWICWrapperBitmap = null;
++                        return unchecked((int)0x80070057); // E_INVALIDARG
++                    }
++
++                    Nova.Imaging.WicHandleTable.AddRef(token);
++                    pCWICWrapperBitmap = new BitmapSourceSafeMILHandle(token, pIWICBitmapSource);
++                    return 0; // S_OK
+                 }
+ 
+                 return CreateCWICWrapperBitmapCore(pIWICBitmapSource, out pCWICWrapperBitmap);
+@@ -615,35 +623,159 @@ ref System.Windows.Media.Imaging.PROPVARIANT propValue
+ 
+         internal static class WICBitmapSource
+         {
++            internal static int /* HRESULT */ GetSize(
++                System.Windows.Media.SafeMILHandle /* IWICBitmapSource */ THIS_PTR,
++                out UInt32 puiWidth,
++                out UInt32 puiHeight)
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return GetSizeCore(THIS_PTR, out puiWidth, out puiHeight);
++                }
++
++                int hr = Nova.Imaging.ManagedWicCodec.BitmapSourceGetSize(THIS_PTR.DangerousGetHandle(), out int width, out int height);
++                puiWidth = checked((uint)width);
++                puiHeight = checked((uint)height);
++                return hr;
++            }
++
+             [DllImport(DllImport.WindowsCodecs, EntryPoint = "IWICBitmapSource_GetSize_Proxy")]
+-            internal static extern int /* HRESULT */ GetSize(
++            private static extern int /* HRESULT */ GetSizeCore(
+                 System.Windows.Media.SafeMILHandle /* IWICBitmapSource */ THIS_PTR,
+                 out UInt32 puiWidth,
+                 out UInt32 puiHeight);
+ 
++            internal static int /* HRESULT */ GetPixelFormat(
++                System.Windows.Media.SafeMILHandle /* IWICBitmapSource */ THIS_PTR,
++                out Guid pPixelFormatEnum)
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return GetPixelFormatCore(THIS_PTR, out pPixelFormatEnum);
++                }
++
++                int hr = Nova.Imaging.ManagedWicCodec.BitmapSourceGetPixelFormat(THIS_PTR.DangerousGetHandle(), out Nova.Imaging.WicPixelFormat format);
++                pPixelFormatEnum = ToWicPixelFormatGuid(format);
++                return hr;
++            }
++
+             [DllImport(DllImport.WindowsCodecs, EntryPoint = "IWICBitmapSource_GetPixelFormat_Proxy")]
+-            internal static extern int /* HRESULT */ GetPixelFormat(
++            private static extern int /* HRESULT */ GetPixelFormatCore(
+                 System.Windows.Media.SafeMILHandle /* IWICBitmapSource */ THIS_PTR,
+                 out Guid pPixelFormatEnum);
+ 
++            internal static int /* HRESULT */ GetResolution(
++                System.Windows.Media.SafeMILHandle /* IWICBitmapSource */ THIS_PTR,
++                out double pDpiX,
++                out double pDpiY)
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return GetResolutionCore(THIS_PTR, out pDpiX, out pDpiY);
++                }
++
++                return Nova.Imaging.ManagedWicCodec.BitmapSourceGetResolution(THIS_PTR.DangerousGetHandle(), out pDpiX, out pDpiY);
++            }
++
+             [DllImport(DllImport.WindowsCodecs, EntryPoint = "IWICBitmapSource_GetResolution_Proxy")]
+-            internal static extern int /* HRESULT */ GetResolution(
++            private static extern int /* HRESULT */ GetResolutionCore(
+                 System.Windows.Media.SafeMILHandle /* IWICBitmapSource */ THIS_PTR,
+                 out double pDpiX,
+                 out double pDpiY);
+ 
++            internal static int /* HRESULT */ CopyPalette(
++                System.Windows.Media.SafeMILHandle /* IWICBitmapSource */ THIS_PTR,
++                System.Windows.Media.SafeMILHandle /* IMILPalette */ pIPalette)
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return CopyPaletteCore(THIS_PTR, pIPalette);
++                }
++
++                return Nova.Imaging.ManagedWicCodec.BitmapSourceCopyPalette(THIS_PTR.DangerousGetHandle(), pIPalette is null ? 0 : pIPalette.DangerousGetHandle());
++            }
++
+             [DllImport(DllImport.WindowsCodecs, EntryPoint = "IWICBitmapSource_CopyPalette_Proxy")]
+-            internal static extern int /* HRESULT */ CopyPalette(
++            private static extern int /* HRESULT */ CopyPaletteCore(
+                 System.Windows.Media.SafeMILHandle /* IWICBitmapSource */ THIS_PTR,
+                 System.Windows.Media.SafeMILHandle /* IMILPalette */ pIPalette);
+ 
++            internal static int /* HRESULT */ CopyPixels(
++                SafeMILHandle /* IWICBitmapSource */ THIS_PTR,
++                ref Int32Rect prc,
++                UInt32 cbStride,
++                UInt32 cbBufferSize,
++                IntPtr /* BYTE* */ pvPixels)
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return CopyPixelsCore(THIS_PTR, ref prc, cbStride, cbBufferSize, pvPixels);
++                }
++
++                // Linux: CopyPixels must return the source's OWN pixel layout (WPF semantics:
++                // the public BitmapSource.CopyPixels yields the bitmap's Format, straight
++                // Bgra32 for a decoded image). The premultiplied-BGRA conversion for the
++                // render path happens later, at GPU upload (SlaveGraph.EnsureBitmapTexture
++                // requests Prgba32/Pbgra32 from the managed codec). A zero width/height in
++                // prc means "the whole bitmap"; the codec normalizes it.
++                Nova.Imaging.WicPixelFormat sourceFormat = Nova.Imaging.WicPixelFormat.Bgra32;
++                int fmtHr = Nova.Imaging.ManagedWicCodec.BitmapSourceGetPixelFormat(
++                    THIS_PTR.DangerousGetHandle(),
++                    out sourceFormat);
++                int hr = Nova.Imaging.ManagedWicCodec.BitmapSourceCopyPixels(
++                    THIS_PTR.DangerousGetHandle(),
++                    prc.X,
++                    prc.Y,
++                    prc.Width,
++                    prc.Height,
++                    sourceFormat,
++                    checked((int)cbStride),
++                    checked((int)cbBufferSize),
++                    pvPixels);
++                Console.Error.WriteLine($"WIC CopyPixels token={THIS_PTR.DangerousGetHandle():x} rect={prc.X},{prc.Y},{prc.Width},{prc.Height} stride={cbStride} size={cbBufferSize} fmtHr={fmtHr:x} hr={hr:x} fmt={sourceFormat}");
++                return hr;
++            }
++
+             [DllImport(DllImport.WindowsCodecs, EntryPoint = "IWICBitmapSource_CopyPixels_Proxy")]
+-            internal static extern int /* HRESULT */ CopyPixels(
++            private static extern int /* HRESULT */ CopyPixelsCore(
+                 SafeMILHandle /* IWICBitmapSource */ THIS_PTR,
+                 ref Int32Rect prc,
+                 UInt32 cbStride,
+                 UInt32 cbBufferSize,
+                 IntPtr /* BYTE* */ pvPixels);
++
++            /// <summary>Maps the internal straight-BGRA layout to the WPF WIC pixel-format GUID.</summary>
++            private static Guid ToWicPixelFormatGuid(Nova.Imaging.WicPixelFormat format)
++            {
++                return format switch
++                {
++                    Nova.Imaging.WicPixelFormat.Pbgra32 => WICPixelFormatGUIDs.WICPixelFormat32bppPBGRA,
++                    Nova.Imaging.WicPixelFormat.Bgr24 => WICPixelFormatGUIDs.WICPixelFormat24bppBGR,
++                    Nova.Imaging.WicPixelFormat.Bgr32 => WICPixelFormatGUIDs.WICPixelFormat32bppBGR,
++                    _ => WICPixelFormatGUIDs.WICPixelFormat32bppBGRA
++                };
++            }
++
++            /// <summary>Maps a WPF WIC pixel-format GUID to the internal layout (unknown → Bgra32).</summary>
++            internal static Nova.Imaging.WicPixelFormat FromWicPixelFormatGuid(Guid pixelFormatGuid)
++            {
++                if (pixelFormatGuid == WICPixelFormatGUIDs.WICPixelFormat32bppPBGRA)
++                {
++                    return Nova.Imaging.WicPixelFormat.Pbgra32;
++                }
++
++                if (pixelFormatGuid == WICPixelFormatGUIDs.WICPixelFormat24bppBGR)
++                {
++                    return Nova.Imaging.WicPixelFormat.Bgr24;
++                }
++
++                if (pixelFormatGuid == WICPixelFormatGUIDs.WICPixelFormat32bppBGR)
++                {
++                    return Nova.Imaging.WicPixelFormat.Bgr32;
++                }
++
++                return Nova.Imaging.WicPixelFormat.Bgra32;
++            }
+         }
+ 
+         internal static class WICBitmapDecoder
+@@ -684,14 +816,41 @@ out IntPtr /* IWICBitmapSource */ ppIThumbnail
+                 out IntPtr /* IWICMetadataQueryReader */ ppIQueryReader
+                 );
+ 
++            internal static int /* HRESULT */ GetFrameCount(
++                SafeMILHandle THIS_PTR,
++                out uint pFrameCount
++                )
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return GetFrameCountCore(THIS_PTR, out pFrameCount);
++                }
++
++                return Nova.Imaging.ManagedWicCodec.GetFrameCount(THIS_PTR.DangerousGetHandle(), out pFrameCount);
++            }
++
+             [DllImport(DllImport.WindowsCodecs, EntryPoint = "IWICBitmapDecoder_GetFrameCount_Proxy")]
+-            internal static extern int /* HRESULT */ GetFrameCount(
++            private static extern int /* HRESULT */ GetFrameCountCore(
+                 SafeMILHandle THIS_PTR,
+                 out uint pFrameCount
+                 );
+ 
++            internal static int /* HRESULT */ GetFrame(
++                SafeMILHandle /* IWICBitmapDecoder */ THIS_PTR,
++                UInt32 index,
++                out IntPtr /* IWICBitmapFrameDecode */ ppIFrameDecode
++                )
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return GetFrameCore(THIS_PTR, index, out ppIFrameDecode);
++                }
++
++                return Nova.Imaging.ManagedWicCodec.GetFrame(THIS_PTR.DangerousGetHandle(), index, out ppIFrameDecode);
++            }
++
+             [DllImport(DllImport.WindowsCodecs, EntryPoint = "IWICBitmapDecoder_GetFrame_Proxy")]
+-            internal static extern int /* HRESULT */ GetFrame(
++            private static extern int /* HRESULT */ GetFrameCore(
+                 SafeMILHandle /* IWICBitmapDecoder */ THIS_PTR,
+                 UInt32 index,
+                 out IntPtr /* IWICBitmapFrameDecode */ ppIFrameDecode
+@@ -700,8 +859,24 @@ out IntPtr /* IWICBitmapFrameDecode */ ppIFrameDecode
+ 
+         internal static class WICBitmapFrameDecode
+         {
++            internal static int /* HRESULT */ GetThumbnail(
++                SafeMILHandle /* IWICBitmapFrameDecode */ THIS_PTR,
++                out IntPtr /* IWICBitmap */ ppIThumbnail
++                )
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return GetThumbnailCore(THIS_PTR, out ppIThumbnail);
++                }
++
++                _ = THIS_PTR;
++                // No thumbnail on this host (ImageSharp does not expose one); report "not found".
++                ppIThumbnail = IntPtr.Zero;
++                return unchecked((int)0x88982f44); // WINCODEC_ERR_CODECNOTHUMBNAIL
++            }
++
+             [DllImport(DllImport.WindowsCodecs, EntryPoint = "IWICBitmapFrameDecode_GetThumbnail_Proxy")]
+-            internal static extern int /* HRESULT */ GetThumbnail(
++            private static extern int /* HRESULT */ GetThumbnailCore(
+                 SafeMILHandle /* IWICBitmapFrameDecode */ THIS_PTR,
+                 out IntPtr /* IWICBitmap */ ppIThumbnail
+                 );
+@@ -712,8 +887,23 @@ out IntPtr /* IWICBitmap */ ppIThumbnail
+                 out IntPtr /* IWICMetadataQueryReader */ ppIQueryReader
+                 );
+ 
++            internal static int /* HRESULT */ GetColorContexts(
++                SafeMILHandle /* IWICBitmapFrameDecode */ THIS_PTR,
++                uint count,
++                IntPtr[] /* IWICColorContext */ ppIColorContext,
++                out uint pActualCount
++                )
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return GetColorContextsCore(THIS_PTR, count, ppIColorContext, out pActualCount);
++                }
++
++                return Nova.Imaging.ManagedWicCodec.GetColorContextCount(THIS_PTR.DangerousGetHandle(), out pActualCount);
++            }
++
+             [DllImport(DllImport.WindowsCodecs, EntryPoint = "IWICBitmapFrameDecode_GetColorContexts_Proxy")]
+-            internal static extern int /* HRESULT */ GetColorContexts(
++            private static extern int /* HRESULT */ GetColorContextsCore(
+                 SafeMILHandle /* IWICBitmapFrameDecode */ THIS_PTR,
+                 uint count,
+                 IntPtr[] /* IWICColorContext */ ppIColorContext,
+@@ -723,15 +913,36 @@ out uint pActualCount
+ 
+         internal static class MILUnknown
+         {
++            internal static UInt32 AddRef(SafeMILHandle pIUnkown)
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return AddRefCore(pIUnkown);
++                }
++
++                Nova.Imaging.WicHandleTable.AddRef(pIUnkown.DangerousGetHandle());
++                return 1;
++            }
++
+             [DllImport(DllImport.MilCore, EntryPoint = "MILAddRef")]
+-            internal static extern UInt32 AddRef(SafeMILHandle pIUnkown);
++            internal static extern UInt32 AddRefCore(SafeMILHandle pIUnkown);
+ 
+             [DllImport(DllImport.MilCore, EntryPoint = "MILAddRef")]
+             internal static extern UInt32 AddRef(SafeReversePInvokeWrapper pIUnknown);
+ 
+-            [DllImport(DllImport.MilCore, EntryPoint = "MILRelease")]
++            internal static int Release(IntPtr pIUnkown)
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return ReleaseCore(pIUnkown);
++                }
++
++                Nova.Imaging.WicHandleTable.Release(pIUnkown);
++                return 0;
++            }
+ 
+-            internal static extern int Release(IntPtr pIUnkown);
++            [DllImport(DllImport.MilCore, EntryPoint = "MILRelease")]
++            private static extern int ReleaseCore(IntPtr pIUnkown);
+ 
+             internal static void ReleaseInterface(ref IntPtr ptr)
+             {
+@@ -743,14 +954,66 @@ internal static void ReleaseInterface(ref IntPtr ptr)
+                 }
+             }
+ 
++            internal static int /* HRESULT */ QueryInterface(
++                IntPtr pIUnknown,
++                ref Guid guid,
++                out IntPtr ppvObject)
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return QueryInterfaceIntPtrCore(pIUnknown, ref guid, out ppvObject);
++                }
++
++                // The imaging tokens already ARE IWICBitmapSource; QI for it is identity.
++                // COM QI always AddRefs the returned pointer and every caller releases it
++                // (a wrapping SafeMILHandle or an explicit ReleaseInterface), so the token's
++                // refcount must be bumped here or the first Release frees the bitmap while
++                // the caller still holds it — the ImageBrush bitmap vanished between
++                // CachedBitmap construction and the DUCE send.
++                Nova.Imaging.WicHandleTable.AddRef(pIUnknown);
++                ppvObject = pIUnknown;
++                return 0; // S_OK
++            }
++
+             [DllImport(DllImport.MilCore, EntryPoint = "MILQueryInterface")]
+-            internal static extern int /* HRESULT */ QueryInterface(
++            private static extern int /* HRESULT */ QueryInterfaceIntPtrCore(
+                 IntPtr pIUnknown,
+                 ref Guid guid,
+                 out IntPtr ppvObject);
+ 
++            internal static int /* HRESULT */ QueryInterface(
++                SafeMILHandle pIUnknown,
++                ref Guid guid,
++                out IntPtr ppvObject)
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return QueryInterfaceCore(pIUnknown, ref guid, out ppvObject);
++                }
++
++                // RenderTargetBitmap is deferred on this host. Its composition path
++                // (BitmapVisualManager.Render) QIs the render-target handle for
++                // IID_IMILRenderTargetBitmap to drive the sync-channel generic target
++                // (PrintInitialize / MILCMD_GENERICTARGET_CREATE) — a native route with no
++                // managed seam. Throw the same clear catchable exception as the factory gates,
++                // so Render(visual) fails cleanly instead of a DllNotFoundException, a silent
++                // no-op, or a process abort. Imaging tokens (IWIC* QIs below) are unaffected.
++                if (guid == MILGuidData.IID_IMILRenderTargetBitmap)
++                {
++                    throw new PlatformNotSupportedException("RenderTargetBitmap is not yet implemented on this host");
++                }
++
++                // The imaging tokens already ARE IWICBitmapSource; QI for it is identity.
++                // COM QI always AddRefs the returned pointer (see the IntPtr overload above);
++                // without the bump, a QI caller that wraps the result in a releasing
++                // SafeMILHandle drops the token's only refcount and frees the bitmap early.
++                Nova.Imaging.WicHandleTable.AddRef(pIUnknown.DangerousGetHandle());
++                ppvObject = pIUnknown.DangerousGetHandle();
++                return 0; // S_OK
++            }
++
+             [DllImport(DllImport.MilCore, EntryPoint = "MILQueryInterface")]
+-            internal static extern int /* HRESULT */ QueryInterface(
++            private static extern int /* HRESULT */ QueryInterfaceCore(
+                 SafeMILHandle pIUnknown,
+                 ref Guid guid,
+                 out IntPtr ppvObject);
+@@ -930,8 +1193,22 @@ internal static class WICImagingFactory
+                 IntPtr pICodecFactory,
+                 out SafeMILHandle /* IWICPalette */ ppIPalette);
+ 
++            internal static int /* HRESULT */ CreateFormatConverter(
++                IntPtr pICodecFactory,
++                out BitmapSourceSafeMILHandle /* IWICFormatConverter */ ppFormatConverter)
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return CreateFormatConverterCore(pICodecFactory, out ppFormatConverter);
++                }
++
++                int hr = Nova.Imaging.ManagedWicCodec.CreateFormatConverter(out nint token);
++                ppFormatConverter = hr == 0 ? new BitmapSourceSafeMILHandle(token) : null;
++                return hr;
++            }
++
+             [DllImport(DllImport.WindowsCodecs, EntryPoint = "IWICImagingFactory_CreateFormatConverter_Proxy")]
+-            internal static extern int /* HRESULT */ CreateFormatConverter(
++            private static extern int /* HRESULT */ CreateFormatConverterCore(
+                 IntPtr pICodecFactory,
+                 out BitmapSourceSafeMILHandle /* IWICFormatConverter */ ppFormatConverter);
+ 
+@@ -962,15 +1239,59 @@ internal static class WICImagingFactory
+                 ref Guid guidVendor,
+                 out SafeMILHandle /* IUnknown** */ ppICodec);
+ 
++            internal static int /*HRESULT*/ CreateBitmapFromSource(
++                IntPtr THIS_PTR,
++                SafeMILHandle /* IWICBitmapSource */ pIBitmapSource,
++                WICBitmapCreateCacheOptions options,
++                out BitmapSourceSafeMILHandle /* IWICBitmap */ ppIBitmap)
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return CreateBitmapFromSourceCore(THIS_PTR, pIBitmapSource, options, out ppIBitmap);
++                }
++
++                _ = options;
++                int hr = Nova.Imaging.ManagedWicCodec.CreateBitmapFromSource(pIBitmapSource.DangerousGetHandle(), out nint token);
++                ppIBitmap = hr == 0 ? new BitmapSourceSafeMILHandle(token) : null;
++                return hr;
++            }
++
+             [DllImport(DllImport.WindowsCodecs, EntryPoint = "IWICImagingFactory_CreateBitmapFromSource_Proxy")]
+-            internal static extern int /*HRESULT*/ CreateBitmapFromSource(
++            private static extern int /*HRESULT*/ CreateBitmapFromSourceCore(
+                 IntPtr THIS_PTR,
+                 SafeMILHandle /* IWICBitmapSource */ pIBitmapSource,
+                 WICBitmapCreateCacheOptions options,
+                 out BitmapSourceSafeMILHandle /* IWICBitmap */ ppIBitmap);
+ 
++            internal static int /*HRESULT*/ CreateBitmapFromMemory(
++                IntPtr THIS_PTR,
++                UInt32 width,
++                UInt32 height,
++                ref Guid pixelFormatGuid,
++                UInt32 stride,
++                UInt32 cbBufferSize,
++                IntPtr /* BYTE* */ pvPixels,
++                out BitmapSourceSafeMILHandle /* IWICBitmap */ ppIBitmap)
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return CreateBitmapFromMemoryCore(THIS_PTR, width, height, ref pixelFormatGuid, stride, cbBufferSize, pvPixels, out ppIBitmap);
++                }
++
++                int hr = Nova.Imaging.ManagedWicCodec.CreateBitmapFromMemory(
++                    checked((int)width),
++                    checked((int)height),
++                    WICBitmapSource.FromWicPixelFormatGuid(pixelFormatGuid),
++                    checked((int)stride),
++                    checked((int)cbBufferSize),
++                    pvPixels,
++                    out nint token);
++                ppIBitmap = hr == 0 ? new BitmapSourceSafeMILHandle(token) : null;
++                return hr;
++            }
++
+             [DllImport(DllImport.WindowsCodecs, EntryPoint = "IWICImagingFactory_CreateBitmapFromMemory_Proxy")]
+-            internal static extern int /*HRESULT*/ CreateBitmapFromMemory(
++            private static extern int /*HRESULT*/ CreateBitmapFromMemoryCore(
+                 IntPtr THIS_PTR,
+                 UInt32 width,
+                 UInt32 height,
+@@ -1121,8 +1442,34 @@ internal static class WICBitmapScaler
+ 
+         internal static class WICFormatConverter
+         {
++            internal static int /* HRESULT */ Initialize(
++                System.Windows.Media.SafeMILHandle /* IWICFormatConverter */ THIS_PTR,
++                System.Windows.Media.SafeMILHandle /* IWICBitmapSource */ source,
++                ref Guid dstFormat,
++                DitherType dither,
++                System.Windows.Media.SafeMILHandle /* IWICBitmapPalette */ bitmapPalette,
++                double alphaThreshold,
++                WICPaletteType paletteTranslate
++                )
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return InitializeCore(THIS_PTR, source, ref dstFormat, dither, bitmapPalette, alphaThreshold, paletteTranslate);
++                }
++
++                _ = dither;
++                _ = bitmapPalette;
++                _ = alphaThreshold;
++                _ = paletteTranslate;
++                return Nova.Imaging.ManagedWicCodec.FormatConverterInitialize(
++                    THIS_PTR.DangerousGetHandle(),
++                    source.DangerousGetHandle(),
++                    WICBitmapSource.FromWicPixelFormatGuid(dstFormat),
++                    out _);
++            }
++
+             [DllImport(DllImport.WindowsCodecs, EntryPoint = "IWICFormatConverter_Initialize_Proxy")]
+-            internal static extern int /* HRESULT */ Initialize(
++            private static extern int /* HRESULT */ InitializeCore(
+                 System.Windows.Media.SafeMILHandle /* IWICFormatConverter */ THIS_PTR,
+                 System.Windows.Media.SafeMILHandle /* IWICBitmapSource */ source,
+                 ref Guid dstFormat,
+@@ -1192,8 +1539,21 @@ internal static class WICBitmap
+                 LockFlags flags,
+                 out SafeMILHandle /* IWICBitmapLock* */ ppILock);
+ 
++            internal static int /* HRESULT */ SetResolution(
++                System.Windows.Media.SafeMILHandle /* IWICBitmap */ THIS_PTR,
++                double dpiX,
++                double dpiY)
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return SetResolutionCore(THIS_PTR, dpiX, dpiY);
++                }
++
++                return Nova.Imaging.ManagedWicCodec.BitmapSetResolution(THIS_PTR.DangerousGetHandle(), dpiX, dpiY);
++            }
++
+             [DllImport(DllImport.WindowsCodecs, EntryPoint = "IWICBitmap_SetResolution_Proxy")]
+-            internal static extern int /* HRESULT */ SetResolution(
++            private static extern int /* HRESULT */ SetResolutionCore(
+                 System.Windows.Media.SafeMILHandle /* IWICBitmap */ THIS_PTR,
+                 double dpiX,
+                 double dpiY);
+@@ -1239,18 +1599,34 @@ out IntPtr ppICodecFactory
+             {
+                 if (!OperatingSystem.IsWindows())
+                 {
+-                    // Imaging is deferred on this host (no windowscodecs). Same
+-                    // clear catchable failure as MILFactory2.CreateFactory: the
+-                    // WIC factory is only reachable from FactoryMaker, which
+-                    // already threw before this point, so this is defense in depth.
+-                    throw new PlatformNotSupportedException("imaging is not yet implemented on this host");
++                    // Linux: return a managed imaging-factory token (stateless).
++                    _ = SDKVersion;
++                    return Nova.Imaging.ManagedWicCodec.CreateImagingFactory(out ppICodecFactory);
+                 }
+ 
+                 return CreateImagingFactoryCore(SDKVersion, out ppICodecFactory);
+             }
+ 
++            internal static int /* HRESULT */ WICConvertBitmapSource(
++                ref Guid dstPixelFormatGuid,
++                SafeMILHandle /* IWICBitmapSource */ pISrc,
++                out BitmapSourceSafeMILHandle /* IWICBitmapSource* */ ppIDst)
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return WICConvertBitmapSourceCore(ref dstPixelFormatGuid, pISrc, out ppIDst);
++                }
++
++                _ = dstPixelFormatGuid;
++                // The managed storage is always straight Bgra32; conversion to the requested
++                // layout happens lazily in CopyPixels. WICConvertBitmapSource = clone.
++                int hr = Nova.Imaging.ManagedWicCodec.CreateBitmapFromSource(pISrc.DangerousGetHandle(), out nint token);
++                ppIDst = hr == 0 ? new BitmapSourceSafeMILHandle(token) : null;
++                return hr;
++            }
++
+             [DllImport(DllImport.WindowsCodecs, EntryPoint = "WICConvertBitmapSource")]
+-            internal static extern int /* HRESULT */ WICConvertBitmapSource(
++            private static extern int /* HRESULT */ WICConvertBitmapSourceCore(
+                 ref Guid dstPixelFormatGuid,
+                 SafeMILHandle /* IWICBitmapSource */ pISrc,
+                 out BitmapSourceSafeMILHandle /* IWICBitmapSource* */ ppIDst);
+@@ -1330,12 +1706,9 @@ UInt32 SDKVersion
+             {
+                 if (!OperatingSystem.IsWindows())
+                 {
+-                    // Imaging is deferred on this host (no milcore/WIC). Throw a
+-                    // clear, catchable managed exception instead of a hard
+-                    // DllNotFoundException so consumers can detect the missing
+-                    // feature. An Image with no Source never reaches here (no
+-                    // FactoryMaker is constructed); any decode/create attempt does.
+-                    throw new PlatformNotSupportedException("imaging is not yet implemented on this host");
++                    // Linux: return a managed MIL factory token (stateless).
++                    _ = SDKVersion;
++                    return Nova.Imaging.ManagedWicCodec.CreateMilFactory(out ppIFactory);
+                 }
+ 
+                 return CreateFactoryCore(out ppIFactory, SDKVersion);

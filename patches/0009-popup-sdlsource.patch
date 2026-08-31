@@ -1,0 +1,418 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Controls/Primitives/MenuBase.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Controls/Primitives/MenuBase.cs
+index 6453135..5e150a8 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Controls/Primitives/MenuBase.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Controls/Primitives/MenuBase.cs
+@@ -603,6 +603,14 @@ private void RestorePreviousFocus()
+             // we don't want to disturb it.
+             if (IsKeyboardFocusWithin)
+             {
++                if (!OperatingSystem.IsWindows())
++                {
++                    // Linux has no HWND focus; WPF keyboard focus is fully managed and
++                    // restored by the focus scope when the menu closes, so there is no HWND
++                    // to consult (GetFocus would hit user32).
++                    return;
++                }
++
+                 // Only restore WPF focus if the HWND with focus is an
+                 // HwndSource.  This enables child HWNDs, other top-level
+                 // non-WPF HWNDs, or even child HWNDs of other WPF top-level
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Controls/Primitives/Popup.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Controls/Primitives/Popup.cs
+index 7f88b40..8e6a528 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Controls/Primitives/Popup.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Controls/Primitives/Popup.cs
+@@ -1,4 +1,4 @@
+-﻿// Licensed to the .NET Foundation under one or more agreements.
++// Licensed to the .NET Foundation under one or more agreements.
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+ 
+@@ -18,6 +18,7 @@
+ using System.Text;
+ using Accessibility;
+ using MS.Internal;
++using Nova.SdlSource;
+ using MS.Internal.Controls;
+ using MS.Internal.KnownBoxes;
+ using MS.Internal.Interop;
+@@ -1607,7 +1608,7 @@ private void BuildWindow(Visual targetVisual)
+                 ? new NativeMethods.POINT(_positionInfo.X, _positionInfo.Y)
+                 : PopupInitialPlacementHelper.GetPlacementOrigin(this);
+ 
+-            _secHelper.BuildWindow(origin.x, origin.y, targetVisual, IsTransparent, PopupFilterMessage, OnWindowResize, OnDpiChanged);
++            _secHelper.BuildWindow(origin.x, origin.y, targetVisual, IsTransparent, HitTestable, PopupFilterMessage, OnWindowResize, OnDpiChanged);
+         }
+ 
+         /// <summary>
+@@ -2723,6 +2724,24 @@ private Rect GetMouseRect(PlacementMode placement)
+         /// <param name="hotY">The Y position of the hotspot.</param>
+         private static void GetMouseCursorSize(out int width, out int height, out int hotX, out int hotY)
+         {
++            // Linux: the whole Win32 path below is user32/gdi32 (GetCursor, GetIconInfo,
++            // GetObject, GetBitmapBits) and SDL3 exposes no cursor-size query (there is no
++            // SDL_GetCursorSize). PlacementMode.Mouse uses the cursor's bounding box to keep
++            // the popup clear of the pointer; the SDL system cursor is 32x32 with its hotspot
++            // at the top-left, so return that as the documented default. The mouse POSITION
++            // already arrives in desktop-relative device pixels (SdlPresentationSource.
++            // GetGlobalMousePosition → SDL_GetGlobalMouseState), which is the same coordinate
++            // space popups are positioned in (SDL window positions are desktop coords), so no
++            // conversion is needed there.
++            if (!OperatingSystem.IsWindows())
++            {
++                width = 32;
++                height = 32;
++                hotX = 0;
++                hotY = 0;
++                return;
++            }
++
+             /*
+                 The code for this function is based upon
+                 shell\comctl32\v6\tooltips.cpp _GetHcursorPdy3
+@@ -2976,10 +2995,26 @@ internal bool IsChildPopup
+                 }
+             }
+ 
+-            internal bool IsWindowAlive() => _window is not null && !_window.IsDisposed;
++            internal bool IsWindowAlive()
++            {
++                if (!OperatingSystem.IsWindows())
++                {
++                    return _sdlWindow is not null && !_sdlWindow.IsDisposed;
++                }
++
++                HwndSource hwnd = HwndWindow;
++                return hwnd is not null && !hwnd.IsDisposed;
++            }
+ 
+             internal Point ClientToScreen(Visual rootVisual, Point clientPoint)
+             {
++                if (!OperatingSystem.IsWindows())
++                {
++                    // The SDL popup's origin IS its screen position; a client point is
++                    // already in screen coordinates (no Win32 ClientToScreen transform).
++                    return clientPoint;
++                }
++
+                 // Get the HwndSource of the target element.
+                 HwndSource targetWindow = PopupSecurityHelper.GetPresentationSource(rootVisual) as HwndSource;
+ 
+@@ -3057,6 +3092,13 @@ internal NativeMethods.POINT GetMouseCursorPos(Visual targetVisual)
+                 // This is a fallback if we couldn't convert Mouse.GetPosition
+                 NativeMethods.POINT mousePoint = new NativeMethods.POINT(0, 0);
+ 
++                if (!OperatingSystem.IsWindows() && _sdlWindow is { } sdlWindow)
++                {
++                    System.Windows.Point position = sdlWindow.GetGlobalMousePosition();
++                    mousePoint = new NativeMethods.POINT((int)position.X, (int)position.Y);
++                    return mousePoint;
++                }
++
+                 UnsafeNativeMethods.TryGetCursorPos(ref mousePoint);
+ 
+                 return mousePoint;
+@@ -3064,6 +3106,12 @@ internal NativeMethods.POINT GetMouseCursorPos(Visual targetVisual)
+ 
+             internal void SetPopupPos(bool position, int x, int y, bool size, int width, int height)
+             {
++                if (!OperatingSystem.IsWindows() && _sdlWindow is { } sdlWindow)
++                {
++                    sdlWindow.SetBounds(x, y, width, height, position, size);
++                    return;
++                }
++
+                 int flags = NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE;
+                 if (!position)
+                 {
+@@ -3080,6 +3128,17 @@ internal void SetPopupPos(bool position, int x, int y, bool size, int width, int
+ 
+             internal Rect GetParentWindowRect()
+             {
++                if (!OperatingSystem.IsWindows())
++                {
++                    // The "monitor" for a child popup is the owner's window rect.
++                    if (OwnerSource is { } owner && owner.GetPlacement(out int ox, out int oy, out int ow, out int oh))
++                    {
++                        return new Rect(ox, oy, ow, oh);
++                    }
++
++                    return Rect.Empty;
++                }
++
+                 NativeMethods.RECT rect = new NativeMethods.RECT(0, 0, 0, 0);
+ 
+                 IntPtr parent = ParentHandle;
+@@ -3093,6 +3152,16 @@ internal Rect GetParentWindowRect()
+ 
+             internal Rect GetWindowRect()
+             {
++                if (!OperatingSystem.IsWindows())
++                {
++                    if (_sdlWindow is { } sdlWindow && sdlWindow.GetPlacement(out int x, out int y, out int width, out int height))
++                    {
++                        return new Rect(x, y, width, height);
++                    }
++
++                    return Rect.Empty;
++                }
++
+                 NativeMethods.RECT rect = new NativeMethods.RECT(0, 0, 0, 0);
+ 
+                 IntPtr hwnd = Handle;
+@@ -3106,10 +3175,21 @@ internal Rect GetWindowRect()
+ 
+             internal Matrix GetTransformToDevice()
+             {
+-                CompositionTarget ct = _window.CompositionTarget;
+-                if (ct != null && !ct.IsDisposed)
++                if (!OperatingSystem.IsWindows())
+                 {
+-                    return ct.TransformToDevice;
++                    CompositionTarget ct = _sdlWindow?.CompositionTarget;
++                    if (ct != null && !ct.IsDisposed)
++                    {
++                        return ct.TransformToDevice;
++                    }
++
++                    return Matrix.Identity;
++                }
++
++                CompositionTarget ctWindow = HwndWindow?.CompositionTarget;
++                if (ctWindow != null && !ctWindow.IsDisposed)
++                {
++                    return ctWindow.TransformToDevice;
+                 }
+ 
+                 return Matrix.Identity;
+@@ -3137,10 +3217,21 @@ internal static Matrix GetTransformToDevice(Visual targetVisual)
+ 
+             internal Matrix GetTransformFromDevice()
+             {
+-                CompositionTarget ct = _window.CompositionTarget;
+-                if (ct != null && !ct.IsDisposed)
++                if (!OperatingSystem.IsWindows())
++                {
++                    CompositionTarget ct = _sdlWindow?.CompositionTarget;
++                    if (ct != null && !ct.IsDisposed)
++                    {
++                        return ct.TransformFromDevice;
++                    }
++
++                    return Matrix.Identity;
++                }
++
++                CompositionTarget ctWindow = HwndWindow?.CompositionTarget;
++                if (ctWindow != null && !ctWindow.IsDisposed)
+                 {
+-                    return ct.TransformFromDevice;
++                    return ctWindow.TransformFromDevice;
+                 }
+ 
+                 return Matrix.Identity;
+@@ -3148,7 +3239,13 @@ internal Matrix GetTransformFromDevice()
+ 
+             internal void SetWindowRootVisual(Visual v)
+             {
+-                _window.RootVisual = v;
++                if (!OperatingSystem.IsWindows())
++                {
++                    _sdlWindow.RootVisual = v;
++                    return;
++                }
++
++                HwndWindow.RootVisual = v;
+             }
+ 
+             internal static bool IsVisualPresentationSourceNull(Visual visual)
+@@ -3158,6 +3255,12 @@ internal static bool IsVisualPresentationSourceNull(Visual visual)
+ 
+             internal void ShowWindow()
+             {
++                if (!OperatingSystem.IsWindows())
++                {
++                    _sdlWindow?.Show();
++                    return;
++                }
++
+                 if (IsChildPopup)
+                 {
+                     IntPtr lastWebOCHwnd = GetLastWebOCHwnd();
+@@ -3187,6 +3290,12 @@ internal void ShowWindow()
+ 
+             internal void HideWindow()
+             {
++                if (!OperatingSystem.IsWindows())
++                {
++                    _sdlWindow?.Hide();
++                    return;
++                }
++
+                 UnsafeNativeMethods.ShowWindow(new HandleRef(null, Handle), NativeMethods.SW_HIDE);
+             }
+ 
+@@ -3226,6 +3335,11 @@ private IntPtr GetLastWebOCHwnd()
+ 
+             internal void SetHitTestable(bool hitTestable)
+             {
++                if (!OperatingSystem.IsWindows())
++                {
++                    _sdlWindow?.SetHitTestable(hitTestable);
++                    return;
++                }
+ 
+                 // get the window handle
+                 IntPtr handle = Handle;
+@@ -3285,7 +3399,7 @@ private static Visual FindMainTreeVisual(Visual v)
+             }
+ 
+             internal void BuildWindow(int x, int y, Visual placementTarget,
+-                bool transparent, HwndSourceHook hook, AutoResizedEventHandler handler, HwndDpiChangedEventHandler dpiChangedHandler)
++                bool transparent, bool hitTestable, HwndSourceHook hook, AutoResizedEventHandler handler, HwndDpiChangedEventHandler dpiChangedHandler)
+             {
+                 Debug.Assert(!IsChildPopup || (IsChildPopup && !transparent), "Child popups cannot be transparent");
+                 transparent = transparent && !IsChildPopup;
+@@ -3349,9 +3463,32 @@ internal void BuildWindow(int x, int y, Visual placementTarget,
+                 }
+ 
+                 // create popup's window object
+-                HwndSource newWindow = new HwndSource(param);
++                if (!OperatingSystem.IsWindows())
++                {
++                    // Linux: build an SDL-backed popup source instead of an HWND. The owner
++                    // is the placement target's SdlPresentationSource; the popup shares its
++                    // SDL host and Vulkan device. The SDL popup kind is decided HERE, once:
++                    // input-grabbing menus (including transparent ones) are
++                    // SDL_WINDOW_POPUP_MENU, input-pass-through tooltips are
++                    // SDL_WINDOW_TOOLTIP. SDL cannot flip a popup kind in place, and
++                    // recreating the window mid-show destroys the popup's composition
++                    // target, so the kind must match the popup's hit-testability from the
++                    // start (SetHitTestable is a no-op on the SDL window).
++                    SdlPresentationSource ownerSource = PopupSecurityHelper.GetPresentationSource(mainTreeVisual) as SdlPresentationSource;
++                    SdlPresentationSource sdlWindow = new SdlPresentationSource(param, ownerSource, tooltip: IsChildPopup ? false : (transparent && !hitTestable));
++                    if (!IsChildPopup)
++                    {
++                        sdlWindow.AddHook(hook);
++                        sdlWindow.AutoResized += handler;
++                        sdlWindow.DpiChanged += dpiChangedHandler;
++                    }
++
++                    _sdlWindow = sdlWindow;
++                    return;
++                }
+ 
+                 // add hook to the popup's window
++                HwndSource newWindow = new HwndSource(param);
+                 newWindow.AddHook(hook);
+ 
+                 // initialize the private critical window object
+@@ -3370,6 +3507,13 @@ internal void BuildWindow(int x, int y, Visual placementTarget,
+ 
+             private static bool ConnectedToForegroundWindow(IntPtr window)
+             {
++                if (!OperatingSystem.IsWindows())
++                {
++                    // Linux popups are parented to the placement target's source; the
++                    // "connected" check is satisfied by the owner relationship.
++                    return window != IntPtr.Zero;
++                }
++
+                 IntPtr foregroundWindow = UnsafeNativeMethods.GetForegroundWindow();
+ 
+                 while (window != IntPtr.Zero)
+@@ -3408,9 +3552,34 @@ private static IntPtr GetParentHandle(HwndSource hwnd)
+                 return IntPtr.Zero;
+             }
+ 
+-            private IntPtr Handle => GetHandle(_window);
++            private IntPtr Handle
++            {
++                get
++                {
++                    if (!OperatingSystem.IsWindows())
++                    {
++                        return _sdlWindow?.Handle ?? IntPtr.Zero;
++                    }
+ 
+-            private IntPtr ParentHandle => GetParentHandle(_window);
++                    return GetHandle(HwndWindow);
++                }
++            }
++
++            private IntPtr ParentHandle
++            {
++                get
++                {
++                    if (!OperatingSystem.IsWindows())
++                    {
++                        return OwnerSource?.Handle ?? IntPtr.Zero;
++                    }
++
++                    return GetParentHandle(HwndWindow);
++                }
++            }
++
++            /// <summary>The SDL source this popup is parented to, or <c>null</c>.</summary>
++            private SdlPresentationSource OwnerSource => _sdlWindow?.Owner;
+ 
+             private static PresentationSource GetPresentationSource(Visual visual)
+             {
+@@ -3423,6 +3592,18 @@ private static PresentationSource GetPresentationSource(Visual visual)
+             ///
+             /// </summary>
+             internal void ForceMsaaToUiaBridge(PopupRoot popupRoot)
++            {
++                if (!OperatingSystem.IsWindows())
++                {
++                    // The MSAA→UIA bridge loads the Windows-only Accessibility COM interop
++                    // assembly; Linux has no MSAA, so the popup's automation peer is skipped.
++                    return;
++                }
++
++                ForceMsaaToUiaBridgeCore(popupRoot);
++            }
++
++            private void ForceMsaaToUiaBridgeCore(PopupRoot popupRoot)
+             {
+                 if (Handle != IntPtr.Zero && (UnsafeNativeMethods.IsWinEventHookInstalled(NativeMethods.EVENT_OBJECT_FOCUS) || UnsafeNativeMethods.IsWinEventHookInstalled(NativeMethods.EVENT_OBJECT_STATECHANGE)))
+                 {
+@@ -3451,8 +3632,24 @@ internal void ForceMsaaToUiaBridge(PopupRoot popupRoot)
+ 
+             internal void DestroyWindow(HwndSourceHook hook, AutoResizedEventHandler onAutoResizedEventHandler, HwndDpiChangedEventHandler onDpiChagnedEventHandler)
+             {
++                if (!OperatingSystem.IsWindows())
++                {
++                    SdlPresentationSource sdlWindow = _sdlWindow;
++                    _sdlWindow = null;
++                    if (sdlWindow is not null && !sdlWindow.IsDisposed)
++                    {
++                        sdlWindow.AutoResized -= onAutoResizedEventHandler;
++                        sdlWindow.DpiChanged -= onDpiChagnedEventHandler;
++                        sdlWindow.RemoveHook(hook);
++                        sdlWindow.RootVisual = null;
++                        sdlWindow.Dispose();
++                    }
++
++                    return;
++                }
++
+                 // Do this first to prevent infinite loops in dispose
+-                HwndSource hwnd = _window;
++                HwndSource hwnd = HwndWindow;
+                 _window = null;
+ 
+                 if (!hwnd.IsDisposed)
+@@ -3472,7 +3669,13 @@ internal void DestroyWindow(HwndSourceHook hook, AutoResizedEventHandler onAutoR
+             /// </summary>
+             private bool _isChildPopupInitialized;
+ 
+-            private HwndSource _window;
++            private PresentationSource _window;
++
++            /// <summary>The HWND-backed popup source on Windows; <c>null</c> on Linux.</summary>
++            private HwndSource HwndWindow => _window as HwndSource;
++
++            /// <summary>SDL-backed popup source on Linux; <c>null</c> on Windows.</summary>
++            private SdlPresentationSource _sdlWindow;
+ 
+             private const string WebOCWindowClassName = "Shell Embedding";
+         }

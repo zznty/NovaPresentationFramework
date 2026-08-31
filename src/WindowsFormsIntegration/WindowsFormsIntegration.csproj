@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Stub for the WindowsDesktop framework's WindowsFormsIntegration assembly. The BAML
+    compiler records it in the presentation-xmlns assembly set of every presentation XAML
+    (it declares XmlnsDefinition in the presentation namespace upstream), so the runtime's
+    Baml2006SchemaContext eagerly loads it during BAML parsing. On Windows it ships in the
+    WindowsDesktop shared framework; on Nova nothing provides it. Torch uses no WinForms
+    interop, so the assembly only needs to be LOADABLE with the exact identity the BAML
+    references (Version=10.0.0.0, PublicKeyToken=31bf3856ad364e35) — no types are required.
+    PublicSign embeds the Microsoft public key without a private-key signature, which is
+    sufficient for .NET Core load-time identity checks.
+  -->
+  <PropertyGroup>
+    <Description>WindowsFormsIntegration port for the Nova runtime.</Description>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+    <AssemblyName>WindowsFormsIntegration</AssemblyName>
+    <Version>10.0.0.0</Version>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultItems>true</EnableDefaultItems>
+  </PropertyGroup>
+
+</Project>

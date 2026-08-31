@@ -1,0 +1,18 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/ThemeManager.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/ThemeManager.cs
+index 587166c..4e038b1 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/ThemeManager.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/ThemeManager.cs
+@@ -453,6 +453,13 @@ private static IEnumerable<int> FindAllFluentThemeResourceDictionaryIndices(Reso
+ 
+     private static bool IsSystemThemeLight()
+     {
++        if (!OperatingSystem.IsWindows())
++        {
++            // Linux host trap (patches/0023): no Windows personalization registry.
++            // The Nova desktop is a light theme (HostTheme default: Aero2).
++            return Nova.SystemTheme.HostTheme.IsLightTheme;
++        }
++
+         var useLightTheme = Registry.GetValue(RegPersonalizeKeyPath,
+             "AppsUseLightTheme", null) as int?;
+ 

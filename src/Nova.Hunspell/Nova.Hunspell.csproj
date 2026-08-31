@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Safe Hunspell spell-checking via the system libhunspell (MPL option — see NOTICE).</Description>
+    <RootNamespace>Nova.Hunspell</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+</Project>

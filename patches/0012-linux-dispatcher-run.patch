@@ -1,0 +1,230 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Application.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Application.cs
+index 545d4bd..02912b7 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Application.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Application.cs
+@@ -2050,6 +2050,16 @@ private static Package GetResourcePackage(Uri packageUri)
+         /// </summary>
+         private void EnsureHwndSource()
+         {
++            // The parking window exists to receive WM_ACTIVATEAPP /
++            // WM_QUERYENDSESSION on a hidden HWND. Linux has no HWND:
++            // SdlPresentationSource reports app activation from SDL focus
++            // events, so there is nothing to create (and HwndWrapper would
++            // fail on the user32 CreateWindowEx P/Invoke).
++            if (!OperatingSystem.IsWindows())
++            {
++                return;
++            }
++
+             if (_parkingHwnd == null)
+             {
+                 // _appFilterHook needs to be member variable otherwise
+diff --git a/src/Microsoft.DotNet.Wpf/src/WindowsBase/OtherAssemblyAttrs.cs b/src/Microsoft.DotNet.Wpf/src/WindowsBase/OtherAssemblyAttrs.cs
+index cc9a6ad..3210cd0 100644
+--- a/src/Microsoft.DotNet.Wpf/src/WindowsBase/OtherAssemblyAttrs.cs
++++ b/src/Microsoft.DotNet.Wpf/src/WindowsBase/OtherAssemblyAttrs.cs
+@@ -30,6 +30,7 @@
+ [assembly: InternalsVisibleTo(BuildInfo.PresentationFrameworkSystemDrawing)]
+ [assembly: InternalsVisibleTo(BuildInfo.PresentationFrameworkSystemXml)]
+ [assembly: InternalsVisibleTo(BuildInfo.PresentationFrameworkSystemXmlLinq)]
++[assembly: InternalsVisibleTo($"Nova.SdlSource, PublicKey={BuildInfo.WCP_PUBLIC_KEY_STRING}")]
+ 
+ [assembly: TypeForwardedTo(typeof(System.Windows.Markup.ValueSerializer))]
+ [assembly: TypeForwardedTo(typeof(System.Windows.Markup.ArrayExtension))]
+diff --git a/src/Microsoft.DotNet.Wpf/src/WindowsBase/System/Windows/Threading/Dispatcher.cs b/src/Microsoft.DotNet.Wpf/src/WindowsBase/System/Windows/Threading/Dispatcher.cs
+index 5b72d0e..9397c98 100644
+--- a/src/Microsoft.DotNet.Wpf/src/WindowsBase/System/Windows/Threading/Dispatcher.cs
++++ b/src/Microsoft.DotNet.Wpf/src/WindowsBase/System/Windows/Threading/Dispatcher.cs
+@@ -1856,7 +1856,9 @@ private void ShutdownImplInSecurityContext(Object state)
+                 window = _window;
+                 _window = null;
+             }
+-            window.Dispose();
++            // On Linux no message-only window is created (see the ctor), so
++            // window is null there and there is nothing to dispose.
++            window?.Dispose();
+ 
+             // Mark this dispatcher as shut down.  Attempts to BeginInvoke
+             // or Invoke will result in an exception.
+@@ -1978,8 +1980,15 @@ internal bool Abort(DispatcherOperation operation)
+             return notify;
+         }
+ 
+-        private void DrainLinuxQueue()
++        /// <summary>
++        /// Processes every queued operation down to the Inactive priority.
++        /// Returns true when any operation at <see cref="DispatcherPriority.Render"/>
++        /// or above ran — i.e. MediaContext's render pass committed, so a frame
++        /// should be presented. Linux-only (no Win32 input queue to defer behind).
++        /// </summary>
++        private bool DrainLinuxQueue()
+         {
++            bool rendered = false;
+             while (true)
+             {
+                 DispatcherPriority maxPriority;
+@@ -1990,7 +1999,12 @@ private void DrainLinuxQueue()
+ 
+                 if (maxPriority == DispatcherPriority.Invalid || maxPriority == DispatcherPriority.Inactive)
+                 {
+-                    return;
++                    return rendered;
++                }
++
++                if (maxPriority >= DispatcherPriority.Render)
++                {
++                    rendered = true;
+                 }
+ 
+                 ProcessQueue();
+@@ -2087,12 +2101,19 @@ private void PushFrameImpl(DispatcherFrame frame)
+ 
+                 try
+                 {
+-                    while(frame.Continue)
++                    if (OperatingSystem.IsWindows())
+                     {
+-                        if (!GetMessage(ref msg, IntPtr.Zero, 0, 0))
+-                            break;
++                        while (frame.Continue)
++                        {
++                            if (!GetMessage(ref msg, IntPtr.Zero, 0, 0))
++                                break;
+ 
+-                        TranslateAndDispatchMessage(ref msg);
++                            TranslateAndDispatchMessage(ref msg);
++                        }
++                    }
++                    else
++                    {
++                        RunLinuxMessageLoop(frame);
+                     }
+ 
+                     // If this was the last frame to exit after a quit, we
+@@ -2122,6 +2143,111 @@ private void PushFrameImpl(DispatcherFrame frame)
+             }
+         }
+ 
++        /// <summary>
++        /// Host-registered Linux message-loop hooks, injected by Nova.SdlSource at
++        /// type-load (WindowsBase cannot reference the SDL host — reference cycle).
++        /// Single-UI-thread assumption: these are process-wide statics, so a second
++        /// Dispatcher on another thread would share them. That matches the SDL model
++        /// (one event queue, one pump thread) and is the supported v1 shape.
++        /// </summary>
++        private static Func<int, bool> s_linuxEventLoopStep;
++        private static Action s_linuxEventLoopPresent;
++        private static Action s_linuxWakeSignal;
++
++        internal static void RegisterLinuxEventLoop(Func<int, bool> step, Action present, Action wake)
++        {
++            s_linuxEventLoopStep = step;
++            s_linuxEventLoopPresent = present;
++            s_linuxWakeSignal = wake;
++        }
++
++        private void RunLinuxMessageLoop(DispatcherFrame frame)
++        {
++            while (frame.Continue)
++            {
++                // DispatcherTimer promotion is normally driven by a WM_TIMER on
++                // the message-only window. On Linux there is no timer window, so
++                // due timers are promoted here (PromoteTimers raises a due timer's
++                // Inactive-priority operation to its configured priority).
++                PromoteTimers(Environment.TickCount);
++
++                // Run every queued operation and remember whether any
++                // Render-priority+ work ran. MediaContext schedules its render
++                // pass at Render priority, so that is the only signal that a frame
++                // should be presented — an idle app runs no render ops and
++                // presents nothing.
++                bool rendered = DrainLinuxQueue();
++                if (!frame.Continue)
++                {
++                    break;
++                }
++
++                if (rendered)
++                {
++                    s_linuxEventLoopPresent?.Invoke();
++                }
++
++                // Block for input (or a timer/wake) instead of busy-polling.
++                // Negative = wait until an SDL event or a cross-thread wake.
++                int waitMs = ComputeLinuxWaitTimeout();
++                bool keepRunning = s_linuxEventLoopStep is { } step
++                    ? step(waitMs)
++                    : LinuxDefaultWait(waitMs);
++                if (!keepRunning)
++                {
++                    break;
++                }
++            }
++        }
++
++        /// <summary>
++        /// How long the Linux loop may block waiting for input. 0 = don't block
++        /// (queued work must be drained next pass), positive = until the next
++        /// DispatcherTimer is due, -1 = until an SDL event or a cross-thread wake
++        /// (the idle state — blocks in the OS, ~0% CPU).
++        /// </summary>
++        private int ComputeLinuxWaitTimeout()
++        {
++            lock (_instanceLock)
++            {
++                DispatcherPriority maxPriority = _queue.MaxPriority;
++                if (maxPriority != DispatcherPriority.Invalid && maxPriority != DispatcherPriority.Inactive)
++                {
++                    return 0;
++                }
++
++                if (_dueTimeFound)
++                {
++                    int delta = _dueTimeInTicks - Environment.TickCount;
++                    return delta < 0 ? 0 : delta;
++                }
++
++                return -1;
++            }
++        }
++
++        private static readonly ManualResetEventSlim s_linuxWakeEvent = new(false);
++
++        private static bool LinuxDefaultWait(int waitMs)
++        {
++            if (waitMs == 0)
++            {
++                return true;
++            }
++
++            if (waitMs < 0)
++            {
++                s_linuxWakeEvent.Wait();
++            }
++            else
++            {
++                s_linuxWakeEvent.Wait(waitMs);
++            }
++
++            s_linuxWakeEvent.Reset();
++            return true;
++        }
++
+ 
+         private bool GetMessage(ref MSG msg, IntPtr hwnd, int minMessage, int maxMessage)
+         {
+@@ -2357,6 +2483,14 @@ internal bool CriticalRequestProcessing(bool force)
+             // it being changed out from underneath us during shutdown.
+             if (IsWindowNull())
+             {
++                if (!OperatingSystem.IsWindows() && !CheckAccess())
++                {
++                    // A cross-thread BeginInvoke queued work while the dispatcher
++                    // thread may be blocked in the SDL wait: nudge it (both the
++                    // host SDL push and the BCL fallback event).
++                    s_linuxWakeEvent.Set();
++                    s_linuxWakeSignal?.Invoke();
++                }
+                 return !OperatingSystem.IsWindows();
+             }
+ 

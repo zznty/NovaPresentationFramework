@@ -1,0 +1,24 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/MessageBox.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/MessageBox.cs
+index d383e88..609e9a2 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/MessageBox.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/MessageBox.cs
+@@ -1,4 +1,4 @@
+-﻿// Licensed to the .NET Foundation under one or more agreements.
++// Licensed to the .NET Foundation under one or more agreements.
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+ 
+@@ -411,6 +411,13 @@ internal static MessageBoxResult ShowCore(
+             //
+             //Application.BeginModalMessageLoop();
+             //MessageBoxResult result = Win32ToMessageBoxResult(SafeNativeMethods.MessageBox(new HandleRef(owner, handle), messageBoxText, caption, style));
++            if (!OperatingSystem.IsWindows())
++            {
++                // There is no native dialog host on the SDL backend; answer with the
++                // default result so callers proceed as if the default button was clicked.
++                return defaultResult;
++            }
++
+             MessageBoxResult result = Win32ToMessageBoxResult (UnsafeNativeMethods.MessageBox (new HandleRef (null, owner), messageBoxText, caption, style));
+             // modal dialog notification?
+             //

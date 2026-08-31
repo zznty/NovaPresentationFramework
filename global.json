@@ -1,0 +1,19 @@
+{
+  // Single source of truth for the build SDK — CI (.github/workflows) reads
+  // this via setup-dotnet's global-json-file. global.json can express exactly
+  // ONE sdk.version: this is the .NET 11 preview SDK the net11.0 leg builds
+  // with (the in-repo projects multi-target net10.0;net11.0, so the 11
+  // preview is mandatory in-repo; the submodule's own global.json requires
+  // >= 11.0.100-preview.6 with latestFeature, which this satisfies).
+  // CI additionally installs the GA 10.0 runtime via the "10.0.x" channel so
+  // the net10.0 TEST leg can execute — that channel is runtime-only and
+  // cannot live here. Bump this version deliberately, together with the
+  // submodule's Arcade pin.
+  "sdk": {
+    "version": "11.0.100-preview.7.26381.103",
+    "rollForward": "latestPatch"
+  },
+  "msbuild-sdks": {
+    "Microsoft.DotNet.Arcade.Sdk": "11.0.0-beta.26411.119"
+  }
+}

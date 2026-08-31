@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+    <SignAssembly>true</SignAssembly>
+    <PublicSign>true</PublicSign>
+    <AssemblyOriginatorKeyFile>..\..\src\Nova.SdlSource\Wcp.PublicKey.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Nova.DesktopTheme.Host\Nova.DesktopTheme.Host.csproj" />
+    <ProjectReference Include="..\..\src\Nova.DesktopTheme\Nova.DesktopTheme.csproj" />
+    <ProjectReference Include="..\..\src\Nova.SdlSource\Nova.SdlSource.csproj" />
+    <ProjectReference Include="..\..\third_party/dotnet-wpf/src/Microsoft.DotNet.Wpf/src/PresentationFramework/PresentationFramework.csproj">
+      <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+    </ProjectReference>
+    <Reference Include="PresentationFramework">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\PresentationFramework\Debug\$(TargetFramework)\PresentationFramework.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PresentationCore">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\PresentationCore\Debug\$(TargetFramework)\PresentationCore.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="WindowsBase">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\WindowsBase\Debug\$(TargetFramework)\WindowsBase.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="System.Xaml">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\System.Xaml\Debug\$(TargetFramework)\System.Xaml.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <DefaultReferenceExclusion Include="WindowsBase;System.Xaml" />
+  </ItemGroup>
+  <Target Name="FilterImplicitAssemblyReferences"
+          AfterTargets="ResolveTargetingPackAssets"
+          BeforeTargets="_HandlePackageFileConflicts;ResolveAssemblyReferences">
+    <ItemGroup>
+      <_referenceExclusion Include="@(DefaultReferenceExclusion)">
+        <AssemblyName>%(DefaultReferenceExclusion.Identity)</AssemblyName>
+        <ExternallyResolved>true</ExternallyResolved>
+      </_referenceExclusion>
+      <Reference Remove="@(_referenceExclusion)" MatchOnMetadata="AssemblyName;ExternallyResolved" />
+    </ItemGroup>
+  </Target>
+</Project>

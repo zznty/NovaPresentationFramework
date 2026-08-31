@@ -1,0 +1,44 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Documents/NLGSpellerInterop.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Documents/NLGSpellerInterop.cs
+index b39fa74..73c9e12 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Documents/NLGSpellerInterop.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Documents/NLGSpellerInterop.cs
+@@ -33,7 +33,10 @@ internal class NLGSpellerInterop : SpellerInteropBase
+         internal NLGSpellerInterop()
+         {
+             // Start the lifetime of Natural Language library
++            // (on Linux PresentationNative_cor3.dll does not exist: NlLoad throws, and the
++            // partial object's finalizer must not attempt NlUnload afterwards)
+             UnsafeNlMethods.NlLoad();
++            _nlLoaded = true;
+ 
+             bool exceptionThrown = true;
+             try
+@@ -81,7 +84,8 @@ internal NLGSpellerInterop()
+                         _textChunk = null;
+                     }
+ 
+-                    UnsafeNlMethods.NlUnload();
++                    if (_nlLoaded)
++                        UnsafeNlMethods.NlUnload();
+                 }
+             }
+         }
+@@ -93,6 +97,8 @@ internal NLGSpellerInterop()
+ 
+         #endregion Constructors
+ 
++        private bool _nlLoaded;
++
+         //------------------------------------------------------
+         //
+         //  IDispose Methods
+@@ -122,7 +128,8 @@ protected override void Dispose(bool disposing)
+             }
+ 
+             // Stop the lifetime of Natural Language library
+-            UnsafeNlMethods.NlUnload();
++            if (_nlLoaded)
++                UnsafeNlMethods.NlUnload();
+ 
+             _isDisposed = true;
+         }

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>MILCMD / RenderData parser.</Description>
+    <RootNamespace>Nova.MilCmd</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Nova.Geometry\Nova.Geometry.csproj" />
+  </ItemGroup>
+</Project>

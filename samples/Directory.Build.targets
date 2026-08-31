@@ -1,0 +1,19 @@
+<Project>
+  <!--
+    Fail loudly when a <Reference> whose HintPath points into
+    third_party/dotnet-wpf/artifacts/bin does not exist on disk, instead of
+    letting ResolveAssemblyReferences silently drop it (MSB3245 is only a
+    warning). Without this a sample/tests build "succeeds" while omitting
+    PresentationFramework.Classic / PresentationUI, and the whole UI renders
+    nothing at runtime. scripts/bootstrap-worktree.sh builds these in the
+    correct order first.
+  -->
+  <Target Name="ValidateHintPathReferences" AfterTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <_MissingHintPathReference Include="@(Reference)"
+          Condition="'%(Reference.HintPath)' != '' and !Exists('%(Reference.HintPath)')" />
+    </ItemGroup>
+    <Error Condition="'@(_MissingHintPathReference)' != ''"
+           Text="Required WPF reference '%(_MissingHintPathReference.Identity)' does not exist at '%(_MissingHintPathReference.HintPath)'. Build the prerequisite WPF projects first (scripts/bootstrap-worktree.sh does this in the correct order), then rebuild." />
+  </Target>
+</Project>

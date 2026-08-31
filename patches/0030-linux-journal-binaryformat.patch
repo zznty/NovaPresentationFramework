@@ -1,0 +1,124 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/MS/Internal/DataStreams.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/MS/Internal/DataStreams.cs
+index cfc0f4f..1e8b7f3 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/MS/Internal/DataStreams.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/MS/Internal/DataStreams.cs
+@@ -1,4 +1,4 @@
+-﻿// Licensed to the .NET Foundation under one or more agreements.
++// Licensed to the .NET Foundation under one or more agreements.
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+ //
+@@ -121,17 +121,20 @@ private ArrayList SaveSubStreams(UIElement element)
+                             MemoryStream byteStream = new MemoryStream();
+ 
+                             bool success = false;
+-                            try
++                            if (OperatingSystem.IsWindows())
+                             {
+-                                success = BinaryFormatWriter.TryWriteFrameworkObject(byteStream, currentValue);
++                                success = TryWriteNrbf(byteStream, currentValue);
+                             }
+-                            catch (Exception ex) when (!ex.IsCriticalException())
++                            else
+                             {
+-                                // Being extra cautious here, but the Try method above should never throw in normal circumstances.
+-                                Debug.Fail($"Unexpected exception writing binary formatted data. {ex.Message}");
++                                // The NRBF writer lives in the WindowsDesktop-only
++                                // System.Private.Windows.Core; on Linux the journal values
++                                // are written with the Nova JSON serializer (the NRBF
++                                // reader below still loads Windows-created entries).
++                                success = Nova.Serialization.JournalValueSerializer.TryWrite(byteStream, currentValue);
+                             }
+ 
+-                            if(!success)
++                            if(!success && OperatingSystem.IsWindows())
+                             {
+                                 #pragma warning disable SYSLIB0011 // BinaryFormatter is obsolete 
+                                 this.Formatter.Serialize(byteStream, currentValue);
+@@ -153,6 +156,43 @@ private ArrayList SaveSubStreams(UIElement element)
+             return subStreams;
+         }
+ 
++        /// <summary>
++        /// Isolated NRBF write: the <c>System.Private.Windows.Core</c> type reference lives
++        /// here so the JIT never resolves it on Linux (this method is never called there).
++        /// </summary>
++        private static bool TryWriteNrbf(Stream byteStream, object currentValue)
++        {
++            try
++            {
++                return BinaryFormatWriter.TryWriteFrameworkObject(byteStream, currentValue);
++            }
++            catch (Exception ex) when (!ex.IsCriticalException())
++            {
++                // Being extra cautious here, but the Try method above should never throw in normal circumstances.
++                Debug.Fail($"Unexpected exception writing binary formatted data. {ex.Message}");
++                return false;
++            }
++        }
++
++        /// <summary>
++        /// Isolated NRBF read: the <c>System.Formats.Nrbf</c> type reference lives here so
++        /// the JIT never resolves it unless an NRBF journal entry is actually read.
++        /// </summary>
++        private static object? TryReadNrbf(MemoryStream dataStream)
++        {
++            try
++            {
++                NrbfDecoder.Decode(dataStream, leaveOpen: true).TryGetFrameworkObject(out object val);
++                return val;
++            }
++            catch (Exception ex) when (!ex.IsCriticalException())
++            {
++                // Being extra cautious here, but the Try method above should never throw in normal circumstances.
++                Debug.Fail($"Unexpected exception reading binary formatted data. {ex.Message}");
++                return null;
++            }
++        }
++
+         private void SaveState(object node)
+         {
+             UIElement element = node as UIElement;
+@@ -249,19 +289,23 @@ private void LoadSubStreams(UIElement element, ArrayList subStreams)
+                     {
+                         using MemoryStream dataStream = new(subStream._data);
+ 
+-                        try
++                        if (OperatingSystem.IsWindows())
+                         {
+-                            NrbfDecoder.Decode(dataStream, leaveOpen: true).TryGetFrameworkObject(out object val);
+-                            newValue = val;
++                            newValue = TryReadNrbf(dataStream);
+                         }
+-                        catch (Exception ex) when (!ex.IsCriticalException())
++                        else
+                         {
+-                            // Being extra cautious here, but the Try method above should never throw in normal circumstances.
+-                            Debug.Fail($"Unexpected exception reading binary formatted data. {ex.Message}");
++                            // Linux journals are the Nova JSON format; fall back to the
++                            // NRBF reader for entries created on Windows.
++                            if (!Nova.Serialization.JournalValueSerializer.TryRead(dataStream, out newValue))
++                            {
++                                dataStream.Position = 0;
++                                newValue = TryReadNrbf(dataStream);
++                            }
+                         }
+ 
+                         //Using Binary formatter
+-                        if(newValue == null)
++                        if(newValue == null && OperatingSystem.IsWindows())
+                         {
+                             dataStream.Position = 0;
+                             #pragma warning disable SYSLIB0011 // BinaryFormatter is obsolete 
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/PresentationFramework.csproj b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/PresentationFramework.csproj
+index 64f4e0f..c474070 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/PresentationFramework.csproj
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/PresentationFramework.csproj
+@@ -1395,6 +1395,7 @@
+ 
+   <ItemGroup>
+     <ProjectReference Include="..\..\..\..\..\..\src\Nova.SystemTheme\Nova.SystemTheme.csproj" />
++    <ProjectReference Include="..\..\..\..\..\..\src\Nova.Serialization\Nova.Serialization.csproj" />
+   </ItemGroup>
+ 
+   <ItemGroup>

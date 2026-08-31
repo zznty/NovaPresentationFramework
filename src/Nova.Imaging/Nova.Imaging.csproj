@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Managed WIC decoding over ImageSharp.</Description>
+    <RootNamespace>Nova.Imaging</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="SixLabors.ImageSharp" />
+    <ProjectReference Include="..\Nova.Geometry\Nova.Geometry.csproj" />
+  </ItemGroup>
+</Project>

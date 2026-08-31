@@ -1,0 +1,109 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/UnsafeNativeMethodsMilCoreApi.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/UnsafeNativeMethodsMilCoreApi.cs
+index 6db7a43..96996f8 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/UnsafeNativeMethodsMilCoreApi.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/UnsafeNativeMethodsMilCoreApi.cs
+@@ -472,8 +472,39 @@ internal static class WICComponentInfo
+ 
+         internal static class WICBitmapCodecInfo
+         {
++            internal static int /* HRESULT */ GetContainerFormat(
++                System.Windows.Media.SafeMILHandle /* IWICBitmapCodecInfo */ THIS_PTR,
++                out Guid pguidContainerFormat)
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return GetContainerFormatCore(THIS_PTR, out pguidContainerFormat);
++                }
++
++                if (Nova.Imaging.WicHandleTable.TryGet<Nova.Imaging.ManagedWicDecoderInfo>(THIS_PTR.DangerousGetHandle()) is { } info)
++                {
++                    // Same container-format mapping as BitmapDecoder.ContainerFormatToGuid:
++                    // the cache-hit path uses the GUID to pick the BitmapDecoder subclass.
++                    pguidContainerFormat = info.ContainerFormat switch
++                    {
++                        Nova.Imaging.WicContainerFormat.Bmp => MILGuidData.GUID_ContainerFormatBmp,
++                        Nova.Imaging.WicContainerFormat.Gif => MILGuidData.GUID_ContainerFormatGif,
++                        Nova.Imaging.WicContainerFormat.Ico => MILGuidData.GUID_ContainerFormatIco,
++                        Nova.Imaging.WicContainerFormat.Jpeg => MILGuidData.GUID_ContainerFormatJpeg,
++                        Nova.Imaging.WicContainerFormat.Png => MILGuidData.GUID_ContainerFormatPng,
++                        Nova.Imaging.WicContainerFormat.Tiff => MILGuidData.GUID_ContainerFormatTiff,
++                        Nova.Imaging.WicContainerFormat.Wmp => MILGuidData.GUID_ContainerFormatWmp,
++                        _ => Guid.Empty
++                    };
++                    return 0; // S_OK
++                }
++
++                pguidContainerFormat = Guid.Empty;
++                return unchecked((int)0x80004003); // E_POINTER
++            }
++
+             [DllImport(DllImport.WindowsCodecs, EntryPoint = "IWICBitmapCodecInfo_GetContainerFormat_Proxy")]
+-            internal static extern int /* HRESULT */ GetContainerFormat(
++            private static extern int /* HRESULT */ GetContainerFormatCore(
+                 System.Windows.Media.SafeMILHandle /* IWICBitmapCodecInfo */ THIS_PTR,
+                 out Guid pguidContainerFormat);
+ 
+@@ -493,8 +524,38 @@ out UInt32 pcchActual
+                 out UInt32 pcchActual
+                 );
+ 
++            internal static int /* HRESULT */ GetMimeTypes(
++                System.Windows.Media.SafeMILHandle /* IWICBitmapCodecInfo */ THIS_PTR,
++                UInt32 cchMimeTypes,
++                [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder wzMimeTypes,
++                out UInt32 pcchActual
++                )
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return GetMimeTypesCore(THIS_PTR, cchMimeTypes, wzMimeTypes, out pcchActual);
++                }
++
++                if (Nova.Imaging.WicHandleTable.TryGet<Nova.Imaging.ManagedWicDecoderInfo>(THIS_PTR.DangerousGetHandle()) is { } info)
++                {
++                    // WIC two-call convention: first call (cchMimeTypes == 0) reports the
++                    // required length including the null terminator; the second fills the
++                    // caller's buffer.
++                    pcchActual = checked((UInt32)info.MimeTypes.Length + 1);
++                    if (wzMimeTypes != null && cchMimeTypes >= pcchActual)
++                    {
++                        _ = wzMimeTypes.Append(info.MimeTypes);
++                    }
++
++                    return 0; // S_OK
++                }
++
++                pcchActual = 0;
++                return unchecked((int)0x80004003); // E_POINTER
++            }
++
+             [DllImport(DllImport.WindowsCodecs, EntryPoint = "IWICBitmapCodecInfo_GetMimeTypes_Proxy")]
+-            internal static extern int /* HRESULT */ GetMimeTypes(
++            private static extern int /* HRESULT */ GetMimeTypesCore(
+                 System.Windows.Media.SafeMILHandle /* IWICBitmapCodecInfo */ THIS_PTR,
+                 UInt32 cchMimeTypes,
+                 [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder wzMimeTypes,
+@@ -780,8 +841,22 @@ internal static Nova.Imaging.WicPixelFormat FromWicPixelFormatGuid(Guid pixelFor
+ 
+         internal static class WICBitmapDecoder
+         {
++            internal static int /* HRESULT */ GetDecoderInfo(
++                SafeMILHandle THIS_PTR,
++                out SafeMILHandle /* IWICBitmapDecoderInfo */ ppIDecoderInfo)
++            {
++                if (OperatingSystem.IsWindows())
++                {
++                    return GetDecoderInfoCore(THIS_PTR, out ppIDecoderInfo);
++                }
++
++                int hr = Nova.Imaging.ManagedWicCodec.GetDecoderInfo(THIS_PTR.DangerousGetHandle(), out nint token);
++                ppIDecoderInfo = hr == 0 ? new SafeMILHandle(token) : null;
++                return hr;
++            }
++
+             [DllImport(DllImport.WindowsCodecs, EntryPoint = "IWICBitmapDecoder_GetDecoderInfo_Proxy")]
+-            internal static extern int /* HRESULT */ GetDecoderInfo(
++            private static extern int /* HRESULT */ GetDecoderInfoCore(
+                 SafeMILHandle THIS_PTR,
+                 out SafeMILHandle /* IWICBitmapDecoderInfo */ ppIDecoderInfo);
+ 

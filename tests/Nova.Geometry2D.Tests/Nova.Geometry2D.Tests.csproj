@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Nova.Geometry2D\Nova.Geometry2D.csproj" />
+  </ItemGroup>
+</Project>

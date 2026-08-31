@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Managed MIL slave graph and raster walk.</Description>
+    <RootNamespace>Nova.Mil</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Nova.FreeType\Nova.FreeType.csproj" />
+    <ProjectReference Include="..\Nova.Imaging\Nova.Imaging.csproj" />
+    <ProjectReference Include="..\Nova.Geometry\Nova.Geometry.csproj" />
+    <ProjectReference Include="..\Nova.Geometry2D\Nova.Geometry2D.csproj" />
+    <ProjectReference Include="..\Nova.MilCmd\Nova.MilCmd.csproj" />
+    <ProjectReference Include="..\Nova.Text\Nova.Text.csproj" />
+    <ProjectReference Include="..\Nova.Vulkan\Nova.Vulkan.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,200 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Window.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Window.cs
+index aedc66a4..2ee38c3b 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Window.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Window.cs
+@@ -248,8 +248,13 @@ public void DragMove()
+                     // SendMessage's return value is dependent on the message send.  WM_SYSCOMMAND
+                     // and WM_LBUTTONUP return value just signify whether the WndProc handled the
+                     // message or not, so they are not interesting
+-                    UnsafeNativeMethods.SendMessage( Handle, WindowMessage.WM_SYSCOMMAND, (IntPtr)NativeMethods.SC_MOUSEMOVE, IntPtr.Zero);
+-                    UnsafeNativeMethods.SendMessage( Handle, WindowMessage.WM_LBUTTONUP, IntPtr.Zero, IntPtr.Zero);
++                    //
++                    // SDL3 has no WM_SYSCOMMAND/SC_MOUSEMOVE drag loop; do not fake it on Linux.
++                    if (OperatingSystem.IsWindows())
++                    {
++                        UnsafeNativeMethods.SendMessage( Handle, WindowMessage.WM_SYSCOMMAND, (IntPtr)NativeMethods.SC_MOUSEMOVE, IntPtr.Zero);
++                        UnsafeNativeMethods.SendMessage( Handle, WindowMessage.WM_LBUTTONUP, IntPtr.Zero, IntPtr.Zero);
++                    }
+                 }
+             }
+             else
+@@ -3942,6 +3947,19 @@ private bool CanCenterOverWPFOwner
+ 
+         private Rect GetNormalRectDeviceUnits(IntPtr hwndHandle)
+         {
++            if (!OperatingSystem.IsWindows())
++            {
++                // SDL positions are already screen co-ods, so no work-area transform is needed.
++                if (hwndHandle == Handle && _swh?.HwndSourceWindow is { } source
++                    && source.GetPlacement(out int x, out int y, out int width, out int height))
++                {
++                    return new Rect(x, y, width, height);
++                }
++
++                // Foreign (non-SDL) owner handles cannot be queried on Linux.
++                return Rect.Empty;
++            }
++
+             int styleEx = UnsafeNativeMethods.GetWindowLong(new HandleRef(this, hwndHandle), NativeMethods.GWL_EXSTYLE);
+ 
+             NativeMethods.WINDOWPLACEMENT wp = new NativeMethods.WINDOWPLACEMENT
+@@ -4170,9 +4188,36 @@ private void SetOwnerHandle(IntPtr ownerHandle)
+ 
+             if (!IsSourceWindowNull)
+             {
+-                UnsafeNativeMethods.SetWindowLong(new HandleRef(null, Handle),
+-                    NativeMethods.GWL_HWNDPARENT,
+-                    _ownerHandle);
++                if (!OperatingSystem.IsWindows())
++                {
++                    // Route the HWND-parent change to SDL window ownership (SDL_SetWindowParent).
++                    // The owner handle is an SDL window pointer; resolve it to the live source.
++                    // A non-zero handle that matches no live source is a foreign (non-SDL) owner,
++                    // which is unsupported on Linux: leave the current parent untouched.
++                    SdlPresentationSource ownerSource = null;
++                    if (_ownerHandle != IntPtr.Zero)
++                    {
++                        foreach (PresentationSource candidate in PresentationSource.CurrentSources)
++                        {
++                            if (candidate is SdlPresentationSource sdl && sdl.Handle == _ownerHandle)
++                            {
++                                ownerSource = sdl;
++                                break;
++                            }
++                        }
++                    }
++
++                    if (ownerSource is not null || _ownerHandle == IntPtr.Zero)
++                    {
++                        _swh.HwndSourceWindow.SetOwner(ownerSource);
++                    }
++                }
++                else
++                {
++                    UnsafeNativeMethods.SetWindowLong(new HandleRef(null, Handle),
++                        NativeMethods.GWL_HWNDPARENT,
++                        _ownerHandle);
++                }
+ 
+                 // Update and reset the Owner Window if this is set through WindowInteropHelper.
+                 // We want to do this because once we are passed in the IntPtr for
+@@ -5178,6 +5223,29 @@ private void OnWindowStateChanged(WindowState windowState)
+             {
+                 if (_isVisible)
+                 {
++                    if (!OperatingSystem.IsWindows())
++                    {
++                        // SDL3 tracks the real window state itself, so route the state change
++                        // directly instead of consulting cached WS_* style bits.
++                        SdlPresentationSource source = _swh?.HwndSourceWindow;
++                        if (source is not null)
++                        {
++                            switch (windowState)
++                            {
++                                case WindowState.Normal:
++                                    source.Restore();
++                                    break;
++                                case WindowState.Maximized:
++                                    source.Maximize();
++                                    break;
++                                case WindowState.Minimized:
++                                    source.Minimize();
++                                    break;
++                            }
++                        }
++                    }
++                    else
++                    {
+                     HandleRef hr = new HandleRef(this,  Handle);
+ 
+                     int style = _Style;
+@@ -5247,6 +5315,7 @@ private void OnWindowStateChanged(WindowState windowState)
+                         // WCP: Window.WindowState should implement FullScreen and Theatre
+                         // modes
+                     }
++                    }
+                 }
+             }
+             else
+@@ -5318,11 +5387,25 @@ private void OnTopmostChanged(bool topmost)
+             // Adding check for IsCompositionTargetInvalid
+             if (!IsSourceWindowNull && !IsCompositionTargetInvalid)
+             {
+-                HandleRef hWnd = topmost ? NativeMethods.HWND_TOPMOST : NativeMethods.HWND_NOTOPMOST;
+-                UnsafeNativeMethods.SetWindowPos(new HandleRef(null, Handle),
+-                       hWnd,
+-                       0, 0, 0, 0,
+-                       NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
++                if (!OperatingSystem.IsWindows())
++                {
++                    // SDL3 has no HWND_TOPMOST z-order insert. Raise the window as a best-effort
++                    // approximation (a single raise, not a persistent always-on-top state).
++                    // SDL_SetWindowAlwaysOnTop exists in Silk.NET.SDL 3.0.0-build1712.0 but is
++                    // intentionally not wired by the Linux host contract.
++                    if (topmost)
++                    {
++                        _swh.HwndSourceWindow.BringToFront();
++                    }
++                }
++                else
++                {
++                    HandleRef hWnd = topmost ? NativeMethods.HWND_TOPMOST : NativeMethods.HWND_NOTOPMOST;
++                    UnsafeNativeMethods.SetWindowPos(new HandleRef(null, Handle),
++                           hWnd,
++                           0, 0, 0, 0,
++                           NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
++                }
+             }
+         }
+ 
+@@ -5895,6 +5978,50 @@ private void OnMaxWidthChanged(double maxWidth)
+         // OR-ing of BoundsSpecified enum is not supported.
+         private void UpdateHwndRestoreBounds(double newValue, BoundsSpecified specifiedRestoreBounds)
+         {
++            if (!OperatingSystem.IsWindows())
++            {
++                // SDL3 has no separate restore placement; read the current placement, patch the
++                // specified edge, and write it back. SDL co-ods are screen co-ods (no work-area
++                // transform, unlike Get/SetWindowPlacement).
++                SdlPresentationSource source = _swh?.HwndSourceWindow;
++                if (source is null)
++                {
++                    return;
++                }
++
++                if (!source.GetPlacement(out int x, out int y, out int width, out int height))
++                {
++                    return;
++                }
++
++                double convertedDeviceValue = (LogicalToDeviceUnits(new Point(newValue, 0))).X;
++                switch (specifiedRestoreBounds)
++                {
++                    case BoundsSpecified.Height:
++                        height = DoubleUtil.DoubleToInt(convertedDeviceValue);
++                        break;
++                    case BoundsSpecified.Width:
++                        width = DoubleUtil.DoubleToInt(convertedDeviceValue);
++                        break;
++                    case BoundsSpecified.Top:
++                        int currentHeight = height;
++                        y = DoubleUtil.DoubleToInt((LogicalToDeviceUnits(new Point(0, newValue))).Y);
++                        height = currentHeight;
++                        break;
++                    case BoundsSpecified.Left:
++                        int currentWidth = width;
++                        x = DoubleUtil.DoubleToInt(convertedDeviceValue);
++                        width = currentWidth;
++                        break;
++                    default:
++                        Debug.Fail($"specifiedRestoreBounds can't be {specifiedRestoreBounds}");
++                        break;
++                }
++
++                source.SetBounds(x, y, width, height, move: true, resize: true);
++                return;
++            }
++
+             NativeMethods.WINDOWPLACEMENT wp = new NativeMethods.WINDOWPLACEMENT
+             {
+                 length = Marshal.SizeOf(typeof(NativeMethods.WINDOWPLACEMENT))

@@ -1,0 +1,14 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/Shared/MS/Win32/SafeNativeMethodsCLR.cs b/src/Microsoft.DotNet.Wpf/src/Shared/MS/Win32/SafeNativeMethodsCLR.cs
+index 31cfb2a..39278aa 100644
+--- a/src/Microsoft.DotNet.Wpf/src/Shared/MS/Win32/SafeNativeMethodsCLR.cs
++++ b/src/Microsoft.DotNet.Wpf/src/Shared/MS/Win32/SafeNativeMethodsCLR.cs
+@@ -251,7 +251,8 @@ public static bool KillTimer(HandleRef hwnd, int idEvent)
+ #if FRAMEWORK_NATIVEMETHODS || CORE_NATIVEMETHODS || BASE_NATIVEMETHODS
+         public static int GetTickCount()
+         {
+-            return SafeNativeMethodsPrivate.GetTickCount();
++            // kernel32.dll does not exist on Linux; Environment.TickCount is the same monotonic ms.
++            return OperatingSystem.IsWindows() ? SafeNativeMethodsPrivate.GetTickCount() : Environment.TickCount;
+         }
+ #endif
+ 

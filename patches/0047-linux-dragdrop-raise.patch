@@ -1,0 +1,154 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/Internal/DragDropInterop.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/Internal/DragDropInterop.cs
+new file mode 100644
+index 0000000..2a422f4
+--- /dev/null
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/Internal/DragDropInterop.cs
+@@ -0,0 +1,136 @@
++// Licensed to the .NET Foundation under one or more agreements.
++// The .NET Foundation licenses this file to you under the MIT license.
++
++using System.Windows;
++using System.Windows.Input;
++
++namespace MS.Internal
++{
++    /// <summary>
++    /// Synthetic file-drop raising for the Nova/SDL runtime (patch 0047): the
++    /// compositor delivers SDL drop events instead of the OLE drag-drop
++    /// pipeline, so the host raises the WPF DragEnter/DragOver/Drop routed
++    /// events (tunneling + bubbling) directly at the hit-tested target. The
++    /// DataObject carries the FileDrop format; the OLE clipboard path is not
++    /// touched.
++    /// </summary>
++    internal static class DragDropInterop
++    {
++        /// <summary>
++        /// Raises the file-drop drag events for <paramref name="files"/> at
++        /// <paramref name="position"/> (root-visual coordinates of
++        /// <paramref name="root"/>). Mirrors the OLE sequence: PreviewDragEnter,
++        /// DragEnter, PreviewDragOver, DragOver, PreviewDrop, Drop.
++        /// </summary>
++        internal static void RaiseFileDrop(UIElement root, string[] files, Point position)
++        {
++            ArgumentNullException.ThrowIfNull(root);
++            ArgumentNullException.ThrowIfNull(files);
++
++            DependencyObject target = root.InputHitTest(position) as DependencyObject ?? root;
++            // The OLE DataObject JIT-resolves System.Private.Windows.Core (absent on
++            // Linux — the 0034 trap); the synthetic drop carries a managed,
++            // OLE-free IDataObject instead.
++            IDataObject data = new FileDropDataObject(files);
++            const DragDropEffects effects = DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link;
++
++            Raise(target, DragDrop.PreviewDragEnterEvent, data, position, effects);
++            Raise(target, DragDrop.DragEnterEvent, data, position, effects);
++            Raise(target, DragDrop.PreviewDragOverEvent, data, position, effects);
++            Raise(target, DragDrop.DragOverEvent, data, position, effects);
++            Raise(target, DragDrop.PreviewDropEvent, data, position, effects);
++            Raise(target, DragDrop.DropEvent, data, position, effects);
++        }
++
++        private static void Raise(DependencyObject target, RoutedEvent routedEvent, IDataObject data, Point position, DragDropEffects effects)
++        {
++            var args = new DragEventArgs(data, DragDropKeyStates.None, effects, target, position)
++            {
++                RoutedEvent = routedEvent
++            };
++
++            if (target is UIElement uiElement)
++            {
++                uiElement.RaiseEvent(args);
++            }
++            else if (target is ContentElement contentElement)
++            {
++                contentElement.RaiseEvent(args);
++            }
++        }
++
++        /// <summary>
++        /// A managed, OLE-free <see cref="IDataObject"/> carrying only the FileDrop
++        /// format: the OLE DataObject's construction JIT-resolves
++        /// System.Private.Windows.Core, which has no Linux host.
++        /// </summary>
++        private sealed class FileDropDataObject : IDataObject
++        {
++            private readonly string[] _files;
++
++            internal FileDropDataObject(string[] files)
++            {
++                _files = files;
++            }
++
++            public object? GetData(string format)
++            {
++                return format == DataFormats.FileDrop ? _files : null;
++            }
++
++            public object? GetData(string format, bool autoConvert)
++            {
++                _ = autoConvert;
++                return GetData(format);
++            }
++
++            public object? GetData(Type format)
++            {
++                return format == typeof(string[]) ? _files : null;
++            }
++
++            public bool GetDataPresent(string format)
++            {
++                return format == DataFormats.FileDrop;
++            }
++
++            public bool GetDataPresent(string format, bool autoConvert)
++            {
++                _ = autoConvert;
++                return GetDataPresent(format);
++            }
++
++            public bool GetDataPresent(Type format)
++            {
++                return format == typeof(string[]);
++            }
++
++            public string[] GetFormats()
++            {
++                return [DataFormats.FileDrop];
++            }
++
++            public string[] GetFormats(bool autoConvert)
++            {
++                _ = autoConvert;
++                return GetFormats();
++            }
++
++            public void SetData(object data)
++            {
++            }
++
++            public void SetData(string format, object data)
++            {
++            }
++
++            public void SetData(Type format, object data)
++            {
++            }
++
++            public void SetData(string format, object data, bool autoConvert)
++            {
++            }
++        }
++    }
++}
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj b/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj
+index bfbade2..1714d5d 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj
+@@ -25,6 +25,7 @@
+     <Compile Include="GlobalSuppressions.cs" />
+     <Compile Include="GlobalUsings.cs" />
+     <Compile Include="System\AppContextDefaultValues.cs" />
++    <Compile Include="MS\Internal\DragDropInterop.cs" />
+   </ItemGroup>
+   <ItemGroup>
+     <Compile Include="$(WpfCommonDir)src\System\SR.cs">

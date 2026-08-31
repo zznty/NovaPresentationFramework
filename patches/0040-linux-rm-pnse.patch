@@ -1,0 +1,126 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/WindowsBase/System/IO/Packaging/EncryptedPackage.cs b/src/Microsoft.DotNet.Wpf/src/WindowsBase/System/IO/Packaging/EncryptedPackage.cs
+index e249c8a..7d15699 100644
+--- a/src/Microsoft.DotNet.Wpf/src/WindowsBase/System/IO/Packaging/EncryptedPackage.cs
++++ b/src/Microsoft.DotNet.Wpf/src/WindowsBase/System/IO/Packaging/EncryptedPackage.cs
+@@ -44,6 +44,12 @@ public class EncryptedPackageEnvelope : IDisposable
+             CryptoProvider cryptoProvider
+             )
+         {
++            if (!OperatingSystem.IsWindows())
++            {
++                // Rights Management / compound-file storage (ole32 + msdrm) has no Linux host.
++                throw new PlatformNotSupportedException("Encrypted packages (Rights Management) are not supported on Linux.");
++            }
++
+             ArgumentNullException.ThrowIfNull(envelopeFileName);
+ 
+             ThrowIfRMEncryptionInfoInvalid(publishLicense, cryptoProvider);
+@@ -81,6 +87,12 @@ CryptoProvider cryptoProvider
+             CryptoProvider cryptoProvider
+             )
+         {
++            if (!OperatingSystem.IsWindows())
++            {
++                // Rights Management / compound-file storage (ole32 + msdrm) has no Linux host.
++                throw new PlatformNotSupportedException("Encrypted packages (Rights Management) are not supported on Linux.");
++            }
++
+             ArgumentNullException.ThrowIfNull(envelopeStream);
+ 
+             ThrowIfRMEncryptionInfoInvalid(publishLicense, cryptoProvider);
+@@ -127,6 +139,12 @@ CryptoProvider cryptoProvider
+             CryptoProvider cryptoProvider
+             )
+         {
++            if (!OperatingSystem.IsWindows())
++            {
++                // Rights Management / compound-file storage (ole32 + msdrm) has no Linux host.
++                throw new PlatformNotSupportedException("Encrypted packages (Rights Management) are not supported on Linux.");
++            }
++
+             ArgumentNullException.ThrowIfNull(envelopeFileName);
+             ArgumentNullException.ThrowIfNull(packageStream);
+ 
+@@ -170,6 +188,12 @@ CryptoProvider cryptoProvider
+             CryptoProvider cryptoProvider
+             )
+         {
++            if (!OperatingSystem.IsWindows())
++            {
++                // Rights Management / compound-file storage (ole32 + msdrm) has no Linux host.
++                throw new PlatformNotSupportedException("Encrypted packages (Rights Management) are not supported on Linux.");
++            }
++
+             ArgumentNullException.ThrowIfNull(envelopeStream);
+             ArgumentNullException.ThrowIfNull(packageStream);
+ 
+@@ -212,6 +236,12 @@ CryptoProvider cryptoProvider
+             FileShare sharing
+             )
+         {
++            if (!OperatingSystem.IsWindows())
++            {
++                // Rights Management / compound-file storage (ole32 + msdrm) has no Linux host.
++                throw new PlatformNotSupportedException("Encrypted packages (Rights Management) are not supported on Linux.");
++            }
++
+             ArgumentNullException.ThrowIfNull(envelopeFileName);
+ 
+             _root = StorageRoot.Open(
+@@ -236,6 +266,12 @@ FileShare sharing
+             Stream envelopeStream
+             )
+         {
++            if (!OperatingSystem.IsWindows())
++            {
++                // Rights Management / compound-file storage (ole32 + msdrm) has no Linux host.
++                throw new PlatformNotSupportedException("Encrypted packages (Rights Management) are not supported on Linux.");
++            }
++
+             ArgumentNullException.ThrowIfNull(envelopeStream);
+ 
+             _root = StorageRoot.CreateOnStream(envelopeStream, _defaultFileModeForOpen);
+@@ -463,10 +499,22 @@ public static bool
+             string fileName
+             )
+         {
++            if (!OperatingSystem.IsWindows())
++            {
++                // Rights Management / compound-file storage (ole32 + msdrm) has no Linux host.
++                throw new PlatformNotSupportedException("Encrypted packages (Rights Management) are not supported on Linux.");
++            }
++
+             bool retval = false;
+ 
+             ArgumentNullException.ThrowIfNull(fileName);
+ 
++            if (!OperatingSystem.IsWindows())
++            {
++                // Rights Management / compound-file storage (ole32) has no Linux host.
++                throw new PlatformNotSupportedException("Encrypted packages (Rights Management) are not supported on Linux.");
++            }
++
+             StorageRoot root = null;
+ 
+             try
+@@ -518,8 +566,20 @@ public static bool
+             Stream stream
+             )
+         {
++            if (!OperatingSystem.IsWindows())
++            {
++                // Rights Management / compound-file storage (ole32 + msdrm) has no Linux host.
++                throw new PlatformNotSupportedException("Encrypted packages (Rights Management) are not supported on Linux.");
++            }
++
+             ArgumentNullException.ThrowIfNull(stream);
+ 
++            if (!OperatingSystem.IsWindows())
++            {
++                // Rights Management / compound-file storage (ole32) has no Linux host.
++                throw new PlatformNotSupportedException("Encrypted packages (Rights Management) are not supported on Linux.");
++            }
++
+             bool retval = false;
+             StorageRoot root = null;
+ 

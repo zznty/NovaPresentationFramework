@@ -1,0 +1,17 @@
+# .NET build output
+bin/
+obj/
+[Bb]in/
+[Oo]bj/
+
+# Build/test artifacts
+artifacts/
+TestResults/
+
+# IDE/tool noise
+.vs/
+.idea/
+*.user
+*.suo
+*.DotSettings.user
+patches/.regenerate-backup/

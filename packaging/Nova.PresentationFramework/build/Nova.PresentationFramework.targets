@@ -1,0 +1,5 @@
+<Project>
+  <!-- Thin re-import of buildTransitive, guarded so NuGet's direct-dependency
+       build/ import never double-executes the targets. -->
+  <Import Project="..\buildTransitive\Nova.PresentationFramework.targets" Condition="'$(NovaPresentationFrameworkTargetsImported)' != 'true'" />
+</Project>

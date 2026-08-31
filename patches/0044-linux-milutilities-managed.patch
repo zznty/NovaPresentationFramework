@@ -1,0 +1,92 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/MILUtilities.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/MILUtilities.cs
+index d9fb2c9..d7b56f4 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/MILUtilities.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/MILUtilities.cs
+@@ -1,4 +1,4 @@
+-﻿// Licensed to the .NET Foundation under one or more agreements.
++// Licensed to the .NET Foundation under one or more agreements.
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+ //
+@@ -150,7 +150,7 @@ internal struct MilRectF
+             out MilRectF prcDestRect); 
+ 
+         [DllImport(DllImport.MilCore, EntryPoint = "MilUtility_CopyPixelBuffer", PreserveSig = false)]
+-        internal static extern unsafe void MILCopyPixelBuffer(
++        private static extern unsafe void MILCopyPixelBufferCore(
+             byte *  pOutputBuffer,
+             uint    outputBufferSize,
+             uint    outputBufferStride,
+@@ -163,10 +163,72 @@ internal static extern unsafe void MILCopyPixelBuffer(
+             uint    copyWidthInBits
+             );
+ 
++        /// <summary>
++        /// Managed replacement for milcore's MilUtility_CopyPixelBuffer on the Linux host
++        /// (patch 0044): the pixel math lives in Nova.Imaging.PixelBufferUtility; this
++        /// wrapper only adapts the raw pointers at the boundary.
++        /// </summary>
++        internal static unsafe void MILCopyPixelBuffer(
++            byte *  pOutputBuffer,
++            uint    outputBufferSize,
++            uint    outputBufferStride,
++            uint    outputBufferOffsetInBits,
++            byte *  pInputBuffer,
++            uint    inputBufferSize,
++            uint    inputBufferStride,
++            uint    inputBufferOffsetInBits,
++            uint    height,
++            uint    copyWidthInBits
++            )
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                MILCopyPixelBufferCore(
++                    pOutputBuffer,
++                    outputBufferSize,
++                    outputBufferStride,
++                    outputBufferOffsetInBits,
++                    pInputBuffer,
++                    inputBufferSize,
++                    inputBufferStride,
++                    inputBufferOffsetInBits,
++                    height,
++                    copyWidthInBits);
++                return;
++            }
++
++            Nova.Imaging.PixelBufferUtility.CopyPixels(
++                new Span<byte>(pOutputBuffer, checked((int)outputBufferSize)),
++                outputBufferStride,
++                outputBufferOffsetInBits,
++                new ReadOnlySpan<byte>(pInputBuffer, checked((int)inputBufferSize)),
++                inputBufferStride,
++                inputBufferOffsetInBits,
++                height,
++                copyWidthInBits);
++        }
++
+         internal static Rect ProjectBounds(
+             ref Matrix3D viewProjMatrix, 
+             ref Rect3D originalBox)
+         {
++            if (!OperatingSystem.IsWindows())
++            {
++                // Managed milcore replacement (patch 0044): the projection math lives in
++                // Nova.Geometry.ProjectionBounds (pure doubles, row-vector convention —
++                // the same layout Matrix3DToD3DMATRIX feeds milcore).
++                Nova.Geometry.Rect bounds = Nova.Geometry.ProjectionBounds.Compute(
++                    viewProjMatrix.M11, viewProjMatrix.M12, viewProjMatrix.M14,
++                    viewProjMatrix.M21, viewProjMatrix.M22, viewProjMatrix.M24,
++                    viewProjMatrix.M31, viewProjMatrix.M32, viewProjMatrix.M34,
++                    viewProjMatrix.OffsetX, viewProjMatrix.OffsetY, viewProjMatrix.M44,
++                    originalBox.X, originalBox.Y, originalBox.Z,
++                    originalBox.SizeX, originalBox.SizeY, originalBox.SizeZ);
++                return bounds.IsEmpty
++                    ? Rect.Empty
++                    : new Rect(bounds.X, bounds.Y, bounds.Width, bounds.Height);
++            }
++
+             D3DMATRIX viewProjFloatMatrix = CompositionResourceManager.Matrix3DToD3DMATRIX(viewProjMatrix);
+             MILRect3D originalBoxFloat = new MILRect3D(ref originalBox);
+             MilRectF outRect = new MilRectF();

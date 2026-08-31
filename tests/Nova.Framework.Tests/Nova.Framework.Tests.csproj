@@ -1,0 +1,96 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <SignAssembly>true</SignAssembly>
+    <PublicSign>true</PublicSign>
+    <AssemblyOriginatorKeyFile>..\..\src\Nova.SdlSource\Wcp.PublicKey.snk</AssemblyOriginatorKeyFile>
+    <!-- WPF0001: upstream [Experimental] ThemeMode API, deliberately exercised by the
+         Fluent-theme acceptance tests. -->
+    <NoWarn>$(NoWarn);WPF0001</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\third_party/dotnet-wpf/src/Microsoft.DotNet.Wpf/src/PresentationFramework/PresentationFramework.csproj">
+      <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+    </ProjectReference>
+    <ProjectReference Include="..\..\third_party/dotnet-wpf/src/Microsoft.DotNet.Wpf/src/PresentationCore/PresentationCore.csproj">
+      <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+    </ProjectReference>
+    <ProjectReference Include="..\..\src\Nova.SdlSource\Nova.SdlSource.csproj" />
+    <ProjectReference Include="..\..\src\Nova.Imaging\Nova.Imaging.csproj" />
+    <ProjectReference Include="..\..\src\Nova.Sdl\Nova.Sdl.csproj" />
+    <ProjectReference Include="..\..\src\Nova.Classification\Nova.Classification.csproj" />
+    <ProjectReference Include="..\..\src\Nova.SystemTheme\Nova.SystemTheme.csproj" />
+    <Reference Include="PresentationFramework">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\PresentationFramework\Debug\$(TargetFramework)\PresentationFramework.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PresentationCore">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\PresentationCore\Debug\$(TargetFramework)\PresentationCore.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="WindowsBase">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\WindowsBase\Debug\$(TargetFramework)\WindowsBase.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="System.Xaml">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\System.Xaml\Debug\$(TargetFramework)\System.Xaml.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="UIAutomationTypes">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\UIAutomationTypes\Debug\$(TargetFramework)\UIAutomationTypes.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="UIAutomationProvider">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\UIAutomationProvider\Debug\$(TargetFramework)\UIAutomationProvider.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PresentationFramework.Classic">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\PresentationFramework.Classic\Debug\$(TargetFramework)\PresentationFramework.Classic.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PresentationFramework.Aero2">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\PresentationFramework.Aero2\Debug\$(TargetFramework)\PresentationFramework.Aero2.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PresentationFramework.Fluent">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\PresentationFramework.Fluent\Debug\$(TargetFramework)\PresentationFramework.Fluent.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PresentationUI">
+      <HintPath>..\..\third_party\dotnet-wpf\artifacts\bin\PresentationUI\Debug\$(TargetFramework)\PresentationUI.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <None Include="..\..\fonts\NovaFluentIcons.ttf" Link="fonts\NovaFluentIcons.ttf" CopyToOutputDirectory="PreserveNewest" />
+    <DefaultReferenceExclusion Include="WindowsBase;System.Xaml" />
+    <PackageReference Include="System.Windows.Extensions" />
+  </ItemGroup>
+  <Target Name="FilterImplicitAssemblyReferences"
+          AfterTargets="ResolveTargetingPackAssets"
+          BeforeTargets="_HandlePackageFileConflicts;ResolveAssemblyReferences">
+    <ItemGroup>
+      <_referenceExclusion Include="@(DefaultReferenceExclusion)">
+        <AssemblyName>%(DefaultReferenceExclusion.Identity)</AssemblyName>
+        <ExternallyResolved>true</ExternallyResolved>
+      </_referenceExclusion>
+      <Reference Remove="@(_referenceExclusion)" MatchOnMetadata="AssemblyName;ExternallyResolved" />
+    </ItemGroup>
+  </Target>
+  <!--
+    Fail loudly when a <Reference> whose HintPath points into
+    third_party/dotnet-wpf/artifacts/bin does not exist on disk, instead of
+    letting ResolveAssemblyReferences silently drop it (MSB3245 is only a
+    warning). Without this the suite build "succeeds" while omitting
+    PresentationFramework.Classic / PresentationUI and the whole UI renders
+    nothing at runtime. scripts/bootstrap-worktree.sh builds these in the
+    correct order first.
+  -->
+  <Target Name="ValidateHintPathReferences" AfterTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <_MissingHintPathReference Include="@(Reference)"
+          Condition="'%(Reference.HintPath)' != '' and !Exists('%(Reference.HintPath)')" />
+    </ItemGroup>
+    <Error Condition="'@(_MissingHintPathReference)' != ''"
+           Text="Required WPF reference '%(_MissingHintPathReference.Identity)' does not exist at '%(_MissingHintPathReference.HintPath)'. Build the prerequisite WPF projects first (scripts/bootstrap-worktree.sh does this in the correct order), then rebuild." />
+  </Target>
+</Project>

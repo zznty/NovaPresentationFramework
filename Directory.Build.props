@@ -1,0 +1,35 @@
+<Project>
+  <PropertyGroup>
+    <!--
+      PLURAL on purpose: a singular <TargetFramework> inherited here would
+      silently defeat a project-level <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+      (the SDK prefers the singular and ignores the plural). WPF-referencing
+      projects override this with their own plural list (net10.0;net11.0).
+    -->
+    <TargetFrameworks>net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-all</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- Only the meta-package project (packaging/Nova.PresentationFramework) is
+         packable; it overrides this with IsPackable=true. -->
+    <IsPackable>false</IsPackable>
+    <NeutralLanguage>en</NeutralLanguage>
+    <Deterministic>true</Deterministic>
+    <Features>strict</Features>
+    <IsAotCompatible Condition="'$(IsTestProject)' != 'true'">true</IsAotCompatible>
+    <!-- All Nova assemblies are public-signed with the Microsoft key (PublicKeyToken
+         31bf3856ad364e35 — the same key the vendored WPF closure uses), so every assembly in
+         the runtime bundle carries one identity. PublicSign embeds the public key without a
+         private-key signature, which .NET Core load-time identity checks accept. -->
+    <SignAssembly>true</SignAssembly>
+    <PublicSign>true</PublicSign>
+    <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)Nova.PublicKey.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="JetBrains.Annotations" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

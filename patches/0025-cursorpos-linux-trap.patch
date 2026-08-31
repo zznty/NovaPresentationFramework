@@ -1,0 +1,21 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/Shared/MS/Win32/UnsafeNativeMethodsCLR.cs b/src/Microsoft.DotNet.Wpf/src/Shared/MS/Win32/UnsafeNativeMethodsCLR.cs
+index b334ff8..1910931 100644
+--- a/src/Microsoft.DotNet.Wpf/src/Shared/MS/Win32/UnsafeNativeMethodsCLR.cs
++++ b/src/Microsoft.DotNet.Wpf/src/Shared/MS/Win32/UnsafeNativeMethodsCLR.cs
+@@ -324,6 +324,16 @@ internal static bool GetCursorPos(ref NativeMethods.POINT pt)
+ 
+         internal static bool TryGetCursorPos(ref NativeMethods.POINT pt)
+         {
++            if (!OperatingSystem.IsWindows())
++            {
++                // Linux host trap (patches/0025): no Win32 cursor API. The NPF tracks the
++                // pointer itself; report the top-left so Window's center-screen math still
++                // resolves a monitor before the SdlSource assigns the real position.
++                pt.x = 0;
++                pt.y = 0;
++                return true;
++            }
++
+             bool returnValue = IntTryGetCursorPos(ref pt);
+ 
+             // Sometimes Win32 will fail this call, such as if you are

@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Host system theme, metrics, and colors.</Description>
+    <RootNamespace>Nova.SystemTheme</RootNamespace>
+  </PropertyGroup>
+</Project>

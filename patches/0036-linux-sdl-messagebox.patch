@@ -1,0 +1,104 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/MessageBox.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/MessageBox.cs
+index 609e9a2..fe3dafd 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/MessageBox.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/MessageBox.cs
+@@ -413,9 +413,7 @@ internal static MessageBoxResult ShowCore(
+             //MessageBoxResult result = Win32ToMessageBoxResult(SafeNativeMethods.MessageBox(new HandleRef(owner, handle), messageBoxText, caption, style));
+             if (!OperatingSystem.IsWindows())
+             {
+-                // There is no native dialog host on the SDL backend; answer with the
+-                // default result so callers proceed as if the default button was clicked.
+-                return defaultResult;
++                return ShowCoreLinux(owner, messageBoxText, caption, style, button, icon, defaultResult, options);
+             }
+ 
+             MessageBoxResult result = Win32ToMessageBoxResult (UnsafeNativeMethods.MessageBox (new HandleRef (null, owner), messageBoxText, caption, style));
+@@ -426,6 +424,88 @@ internal static MessageBoxResult ShowCore(
+             return result;
+         }
+ 
++        /// <summary>
++        ///  The SDL-backed message box (Linux): maps the Win32 style bits to the SDL
++        ///  MessageBox API (the zenity backend on Linux) and back through the same
++        ///  Win32ToMessageBoxResult mapping the Windows path uses. Falls back to the
++        ///  default result when no dialog host is available (no zenity) or for
++        ///  service-style boxes.
++        /// </summary>
++        private static MessageBoxResult ShowCoreLinux(
++            IntPtr owner,
++            string messageBoxText,
++            string caption,
++            int style,
++            MessageBoxButton button,
++            MessageBoxImage icon,
++            MessageBoxResult defaultResult,
++            MessageBoxOptions options)
++        {
++            if ((options & (MessageBoxOptions.ServiceNotification | MessageBoxOptions.DefaultDesktopOnly)) != 0)
++            {
++                // No window context for a service box on the SDL runtime.
++                return defaultResult;
++            }
++
++            Nova.SdlSource.SdlPresentationSource? source = Nova.SdlSource.SdlPresentationSource.FromHandleOrActive(owner);
++            if (source is null)
++            {
++                return defaultResult;
++            }
++
++            Nova.SdlSource.MessageBoxIconKind kind = icon switch
++            {
++                MessageBoxImage.Error or MessageBoxImage.Hand or MessageBoxImage.Stop => Nova.SdlSource.MessageBoxIconKind.Error,
++                MessageBoxImage.Warning or MessageBoxImage.Exclamation => Nova.SdlSource.MessageBoxIconKind.Warning,
++                MessageBoxImage.Information or MessageBoxImage.Asterisk => Nova.SdlSource.MessageBoxIconKind.Information,
++                _ => Nova.SdlSource.MessageBoxIconKind.None,
++            };
++
++            // The button set, in the Win32 order. The ids are the Win32 ID* values the
++            // MessageBoxResult enum mirrors, so the returned id maps straight back.
++            string[] labels = button switch
++            {
++                MessageBoxButton.OK => ["OK"],
++                MessageBoxButton.OKCancel => ["OK", "Cancel"],
++                MessageBoxButton.AbortRetryIgnore => ["Abort", "Retry", "Ignore"],
++                MessageBoxButton.YesNoCancel => ["Yes", "No", "Cancel"],
++                MessageBoxButton.YesNo => ["Yes", "No"],
++                MessageBoxButton.RetryCancel => ["Retry", "Cancel"],
++                MessageBoxButton.CancelTryContinue => ["Cancel", "Try Again", "Continue"],
++                _ => [],
++            };
++            int[] ids = button switch
++            {
++                MessageBoxButton.OK => [IDOK],
++                MessageBoxButton.OKCancel => [IDOK, IDCANCEL],
++                MessageBoxButton.AbortRetryIgnore => [IDABORT, IDRETRY, IDIGNORE],
++                MessageBoxButton.YesNoCancel => [IDYES, IDNO, IDCANCEL],
++                MessageBoxButton.YesNo => [IDYES, IDNO],
++                MessageBoxButton.RetryCancel => [IDRETRY, IDCANCEL],
++                MessageBoxButton.CancelTryContinue => [IDCANCEL, IDTRYAGAIN, IDCONTINUE],
++                _ => [],
++            };
++            if (labels.Length == 0)
++            {
++                return defaultResult;
++            }
++
++            // The MB_DEFBUTTONn bits select the return-key default (0-based index).
++            int defaultIndex = Math.Min((style >> 8) & 0x3, labels.Length - 1);
++            bool hasCancel = button is MessageBoxButton.OKCancel or MessageBoxButton.YesNoCancel
++                or MessageBoxButton.RetryCancel or MessageBoxButton.CancelTryContinue;
++
++            var definitions = new List<Nova.SdlSource.MessageBoxButtonDefinition>(labels.Length);
++            for (int i = 0; i < labels.Length; i++)
++            {
++                bool isCancel = hasCancel && labels[i] == "Cancel";
++                definitions.Add(new Nova.SdlSource.MessageBoxButtonDefinition(ids[i], labels[i], i == defaultIndex, isCancel));
++            }
++
++            int? result = source.ShowMessageBox(caption, messageBoxText, kind, definitions);
++            return result is { } id ? Win32ToMessageBoxResult(id) : defaultResult;
++        }
++
+         private static bool IsValidMessageBoxButton(MessageBoxButton value)
+         {
+             return value == MessageBoxButton.OK

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Nova.DesktopTheme.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Nova.DesktopTheme\Nova.DesktopTheme.csproj" />
+    <ProjectReference Include="..\..\src\Nova.SystemTheme\Nova.SystemTheme.csproj" />
+    <None Include="fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

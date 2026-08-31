@@ -1,0 +1,18 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/Shared/MS/Internal/ReaderWriterLockWrapper.cs b/src/Microsoft.DotNet.Wpf/src/Shared/MS/Internal/ReaderWriterLockWrapper.cs
+index febb190..c8d08c7 100644
+--- a/src/Microsoft.DotNet.Wpf/src/Shared/MS/Internal/ReaderWriterLockWrapper.cs
++++ b/src/Microsoft.DotNet.Wpf/src/Shared/MS/Internal/ReaderWriterLockWrapper.cs
+@@ -286,7 +286,13 @@ public NonPumpingSynchronizationContext()
+ 
+             public override int Wait(IntPtr[] waitHandles, bool waitAll, int millisecondsTimeout)
+             {
++#if !WINDOWS
++                // kernel32.dll does not exist on Linux; the managed equivalent lives in
++                // Nova.SystemTheme (WindowsBase already references it for host traps).
++                return Nova.SystemTheme.WaitHandles.WaitMultiple(waitHandles, waitAll, millisecondsTimeout);
++#else
+                 return MS.Win32.UnsafeNativeMethods.WaitForMultipleObjectsEx(waitHandles.Length, waitHandles, waitAll, millisecondsTimeout, false);
++#endif
+             }
+ 
+             /// <summary>

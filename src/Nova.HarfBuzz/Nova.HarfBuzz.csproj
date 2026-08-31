@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Safe HarfBuzz shaping.</Description>
+    <RootNamespace>Nova.HarfBuzz</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Nova.FreeType\Nova.FreeType.csproj" />
+  </ItemGroup>
+</Project>

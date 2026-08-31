@@ -1,0 +1,100 @@
+diff --git a/Directory.Build.props b/Directory.Build.props
+index a173f27f..b6d9820a 100644
+--- a/Directory.Build.props
++++ b/Directory.Build.props
+@@ -9,6 +9,11 @@
+     <BuildWithNetFrameworkHostedCompiler>true</BuildWithNetFrameworkHostedCompiler>
+     <PublishWindowsPdb>false</PublishWindowsPdb>
+     <TestRunnerName>XUnitV3</TestRunnerName>
++    <!-- Linux managed-only: ApiCompat.exe is not on PATH. -->
++    <RunRefApiCompat>false</RunRefApiCompat>
++    <RunNetFrameworkApiCompat>false</RunNetFrameworkApiCompat>
++    <!-- Linux is case-sensitive: src/Microsoft.DotNet.Wpf/Directory.Build.Props is not imported. -->
++    <NoWarn>$(NoWarn);CA1420;WPF0001</NoWarn>
+   </PropertyGroup>
+ 
+   <!-- Normalize $(TestWpfArcadeSdkPath) by appending a '\' to it if one is missing -->
+@@ -35,4 +40,9 @@
+           Project="Sdk.props"
+           Condition="!Exists('$(WpfArcadeSdkProps)') Or !Exists('$(WpfArcadeSdkTargets)')"/>
+ 
++  <!-- Arcade.Wpf.Sdk pins strawberry-perl portableshell.bat; Linux uses /usr/bin/perl. -->
++  <PropertyGroup Condition="!Exists($(PerlCommand.Replace('&quot;','')))">
++    <PerlCommand>/usr/bin/perl</PerlCommand>
++  </PropertyGroup>
++
+ </Project>
+diff --git a/Directory.Build.targets b/Directory.Build.targets
+index 5dd163a2..55eb3253 100644
+--- a/Directory.Build.targets
++++ b/Directory.Build.targets
+@@ -7,4 +7,9 @@
+           Project="Sdk.targets"
+           Condition="!Exists('$(WpfArcadeSdkProps)') Or !Exists('$(WpfArcadeSdkTargets)')"/>
+   <Import Project="eng/Testing.targets"/>
++
++  <!-- Arcade.Wpf.Sdk pins strawberry-perl portableshell.bat; Linux uses /usr/bin/perl. -->
++  <PropertyGroup>
++    <PerlCommand Condition="!Exists($(PerlCommand.Replace('&quot;','')))">/usr/bin/perl</PerlCommand>
++  </PropertyGroup>
+ </Project>
+diff --git a/NuGet.config b/NuGet.config
+index fc6a2f6a..3f51066d 100644
+--- a/NuGet.config
++++ b/NuGet.config
+@@ -19,6 +19,55 @@
+     <add key="dotnet11-transport" value="https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet11-transport/nuget/v3/index.json" />
+   </packageSources>
+   <disabledPackageSources />
++  <!--
++    Parent repo NuGet.config enables packageSourceMapping. Unmapped
++    sources from this file are then ignored (NU1100). Mirror the
++    unmapped WPF feed set so dnceng packages resolve.
++  -->
++  <packageSourceMapping>
++    <packageSource key="dotnet-eng">
++      <package pattern="*" />
++    </packageSource>
++    <packageSource key="dotnet-libraries-transport">
++      <package pattern="*" />
++    </packageSource>
++    <packageSource key="dotnet-tools">
++      <package pattern="*" />
++    </packageSource>
++    <packageSource key="dotnet-public">
++      <package pattern="*" />
++    </packageSource>
++    <packageSource key="dotnet7">
++      <package pattern="*" />
++    </packageSource>
++    <packageSource key="dotnet7-transport">
++      <package pattern="*" />
++    </packageSource>
++    <packageSource key="dotnet8">
++      <package pattern="*" />
++    </packageSource>
++    <packageSource key="dotnet8-transport">
++      <package pattern="*" />
++    </packageSource>
++    <packageSource key="dotnet9">
++      <package pattern="*" />
++    </packageSource>
++    <packageSource key="dotnet9-transport">
++      <package pattern="*" />
++    </packageSource>
++    <packageSource key="dotnet10">
++      <package pattern="*" />
++    </packageSource>
++    <packageSource key="dotnet10-transport">
++      <package pattern="*" />
++    </packageSource>
++    <packageSource key="dotnet11">
++      <package pattern="*" />
++    </packageSource>
++    <packageSource key="dotnet11-transport">
++      <package pattern="*" />
++    </packageSource>
++  </packageSourceMapping>
+   <auditSources>
+     <clear />
+     <add key="nuget.org" value="https://data.nuget.org/v3/index.json" />

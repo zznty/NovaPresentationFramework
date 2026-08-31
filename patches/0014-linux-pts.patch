@@ -1,0 +1,1416 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/MS/Internal/PtsHost/Pts.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/MS/Internal/PtsHost/Pts.cs
+index 7b57f3a..0b6e403 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/MS/Internal/PtsHost/Pts.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/MS/Internal/PtsHost/Pts.cs
+@@ -1,4 +1,4 @@
+-﻿// Licensed to the .NET Foundation under one or more agreements.
++// Licensed to the .NET Foundation under one or more agreements.
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+ /* SSS_DROP_BEGIN */
+@@ -23,6 +23,7 @@
+ using MS.Internal.Text;
+ 
+ using DllImport = MS.Internal.PresentationFramework.DllImport;
++using NovaPts = Nova.Pts;
+ 
+ namespace MS.Internal.PtsHost.UnsafeNativeMethods
+ {
+@@ -3061,41 +3062,329 @@ internal delegate int TransferDisplayInfoCell(
+         // Object handlers
+         // ------------------------------------------------------------------
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int GetFloaterHandlerInfo(
+-            [In] 
++        internal static int GetFloaterHandlerInfo(
++            [In]
+             ref FSFLOATERINIT pfsfloaterinit,   // IN:  pointer to floater init data (callbacks)
+-            IntPtr pFloaterObjectInfo);         // IN:  pointer to floater object info
++            IntPtr pFloaterObjectInfo)          // IN:  pointer to floater object info
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return GetFloaterHandlerInfoImpl(ref pfsfloaterinit, pFloaterObjectInfo);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int GetTableObjHandlerInfo(
+-            [In] 
++            return PTS.fserrNotImplemented;
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="GetFloaterHandlerInfo")]
++        private static extern int GetFloaterHandlerInfoImpl(
++            [In]
++            ref FSFLOATERINIT pfsfloaterinit,
++            IntPtr pFloaterObjectInfo);
++
++        internal static int GetTableObjHandlerInfo(
++            [In]
+             ref FSTABLEOBJINIT pfstableobjinit, // IN:  pointer to floater init data (callbacks)
+-            IntPtr pTableObjectInfo);           // IN:  pointer to floater object info
++            IntPtr pTableObjectInfo)            // IN:  pointer to floater object info
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return GetTableObjHandlerInfoImpl(ref pfstableobjinit, pTableObjectInfo);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int CreateInstalledObjectsInfo(
+-            [In] 
++            return PTS.fserrNotImplemented;
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="GetTableObjHandlerInfo")]
++        private static extern int GetTableObjHandlerInfoImpl(
++            [In]
++            ref FSTABLEOBJINIT pfstableobjinit,
++            IntPtr pTableObjectInfo);
++
++        internal static int CreateInstalledObjectsInfo(
++            [In]
+             ref FSIMETHODS fssubtrackparamethods,//IN:  pointer to subtrack paragraph callbacks
+             ref FSIMETHODS fssubpageparamethods,// IN:  pointer to subpage paragraph callbacks
+             out IntPtr pInstalledObjects,       // OUT: pointer to installed objects array
+-            out int cInstalledObjects);         // OUT: size of installed objects array
++            out int cInstalledObjects)          // OUT: size of installed objects array
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return CreateInstalledObjectsInfoImpl(ref fssubtrackparamethods, ref fssubpageparamethods, out pInstalledObjects, out cInstalledObjects);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int DestroyInstalledObjectsInfo(
+-            IntPtr pInstalledObjects);          // IN:  pointer to installed objects array
++            return CreateInstalledObjectsInfoLinux(ref fssubtrackparamethods, out pInstalledObjects, out cInstalledObjects);
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="CreateInstalledObjectsInfo")]
++        private static extern int CreateInstalledObjectsInfoImpl(
++            [In]
++            ref FSIMETHODS fssubtrackparamethods,
++            ref FSIMETHODS fssubpageparamethods,
++            out IntPtr pInstalledObjects,
++            out int cInstalledObjects);
++
++        internal static int DestroyInstalledObjectsInfo(
++            IntPtr pInstalledObjects)           // IN:  pointer to installed objects array
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return DestroyInstalledObjectsInfoImpl(pInstalledObjects);
++            }
++
++            return NovaPts.PtsExports.DestroyInstalledObjectsInfo(pInstalledObjects);
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="DestroyInstalledObjectsInfo")]
++        private static extern int DestroyInstalledObjectsInfoImpl(
++            IntPtr pInstalledObjects);
+         // ------------------------------------------------------------------
+         // fscrcontxt.h
+         // ------------------------------------------------------------------
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int CreateDocContext(
+-            [In] 
++        internal static int CreateDocContext(
++            [In]
+             ref FSCONTEXTINFO fscontextinfo,    // IN:  pointer to context information
+-            out IntPtr pfscontext);             // OUT: pointer to the FS context
++            out IntPtr pfscontext)              // OUT: pointer to the FS context
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return CreateDocContextImpl(ref fscontextinfo, out pfscontext);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int DestroyDocContext(
+-            IntPtr pfscontext);                 // IN:  pointer to the FS context
++            return CreateDocContextLinux(ref fscontextinfo, out pfscontext);
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="CreateDocContext")]
++        private static extern int CreateDocContextImpl(
++            [In]
++            ref FSCONTEXTINFO fscontextinfo,
++            out IntPtr pfscontext);
++
++        internal static int DestroyDocContext(
++            IntPtr pfscontext)                  // IN:  pointer to the FS context
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return DestroyDocContextImpl(pfscontext);
++            }
++
++            return NovaPts.PtsExports.DestroyDocContext(pfscontext);
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="DestroyDocContext")]
++        private static extern int DestroyDocContextImpl(
++            IntPtr pfscontext);
++
++        // ------------------------------------------------------------------
++        // Linux: managed PTS (Nova.Pts). The WPF PtsHost callbacks are plain managed
++        // delegates; Nova.Pts drives them through trampolines that field-copy the shared
++        // layout structs (FSRECT/FSPAP/FSTXTPROPS/FSBBOX/FSFLRES/FSCOLUMNINFO) in and out.
++        // ------------------------------------------------------------------
++
++        private static unsafe int CreateInstalledObjectsInfoLinux(
++            ref FSIMETHODS fssubtrackparamethods,
++            out IntPtr pInstalledObjects,
++            out int cInstalledObjects)
++        {
++            NovaPts.FsIMethods novaSubtrack = default;
++            if (fssubtrackparamethods.pfnFormatParaBottomless != null)
++            {
++                FSIMETHODS subtrack = fssubtrackparamethods;
++                novaSubtrack.PfnFormatParaBottomless = (pfssobjc, pfsparaclient, nmp, iArea, pfsgeom, fSuppressTopSpace, fswdir,
++                    urTrack, durTrack, vrTrack, pmcsclientIn, fskclearIn, fInterruptable,
++                    out fsfmtrbl, out pfspara, out dvrUsed, out fsbbox,
++                    out pmcsclientOut, out fskclearOut, out dvrTopSpace, out fPageBecomesUninterruptable) =>
++                {
++                    PTS.FSFMTRBL wpfFmtrbl = default;
++                    PTS.FSBBOX wpfBbox = default;
++                    int rc = subtrack.pfnFormatParaBottomless(pfssobjc, pfsparaclient, nmp, iArea, pfsgeom, fSuppressTopSpace, fswdir,
++                        urTrack, durTrack, vrTrack, pmcsclientIn, (PTS.FSKCLEAR)fskclearIn, fInterruptable,
++                        out wpfFmtrbl, out pfspara, out dvrUsed, out wpfBbox, out pmcsclientOut,
++                        out PTS.FSKCLEAR wpfClearOut, out dvrTopSpace, out fPageBecomesUninterruptable);
++                    fsfmtrbl = (NovaPts.FsFmtResult)wpfFmtrbl;
++                    fsbbox = new NovaPts.FsBbox(wpfBbox.fDefined, new NovaPts.FsRect(wpfBbox.fsrc.u, wpfBbox.fsrc.v, wpfBbox.fsrc.du, wpfBbox.fsrc.dv));
++                    fskclearOut = (int)wpfClearOut;
++                    return (NovaPts.PtsErr)rc;
++                };
++            }
++
++            NovaPts.FsIMethods novaSubpage = default;
++            return NovaPts.PtsExports.CreateInstalledObjectsInfo(ref novaSubtrack, ref novaSubpage, out pInstalledObjects, out cInstalledObjects);
++        }
++
++        private static unsafe int CreateDocContextLinux(
++            ref FSCONTEXTINFO fscontextinfo,
++            out IntPtr pfscontext)
++        {
++            FSCONTEXTINFO client = fscontextinfo;
++            NovaPts.FsContextInfo nova = default;
++            nova.Version = client.version;
++            nova.Fsffi = client.fsffi;
++            nova.DrMinColumnBalancingStep = client.drMinColumnBalancingStep;
++            nova.CInstalledObjects = client.cInstalledObjects;
++            nova.PInstalledObjects = client.pInstalledObjects;
++            nova.PfsClient = client.pfsclient;
++            nova.PtsPenaltyModule = client.ptsPenaltyModule;
++
++            if (client.fscbk.cbkgen.pfnGetPageDimensions != null)
++            {
++                nova.GetPageDimensions = (pfsclient, nms, out fswdir, out fHeaderFooterAtTopBottom,
++                    out durPage, out dvrPage, ref fsrcMargin) =>
++                {
++                    PTS.FSRECT wpfMargin = new PTS.FSRECT(fsrcMargin.U, fsrcMargin.V, fsrcMargin.DU, fsrcMargin.DV);
++                    int rc = client.fscbk.cbkgen.pfnGetPageDimensions(pfsclient, nms, out fswdir, out fHeaderFooterAtTopBottom,
++                        out durPage, out dvrPage, ref wpfMargin);
++                    fsrcMargin = new NovaPts.FsRect(wpfMargin.u, wpfMargin.v, wpfMargin.du, wpfMargin.dv);
++                    return (NovaPts.PtsErr)rc;
++                };
++            }
++
++            if (client.fscbk.cbkgen.pfnGetNextSection != null)
++            {
++                nova.GetNextSection = (pfsclient, nmsCur, out fSuccess, out nmsNext) =>
++                    (NovaPts.PtsErr)client.fscbk.cbkgen.pfnGetNextSection(pfsclient, nmsCur, out fSuccess, out nmsNext);
++            }
++
++            if (client.fscbk.cbkgen.pfnGetSectionProperties != null)
++            {
++                nova.GetSectionProperties = (pfsclient, nms, out fNewPage, out fswdir, out fApplyColumnBalancing,
++                    out ccol, out cSegmentDefinedColumnSpanAreas, out cHeightDefinedColumnSpanAreas) =>
++                    (NovaPts.PtsErr)client.fscbk.cbkgen.pfnGetSectionProperties(pfsclient, nms, out fNewPage, out fswdir,
++                        out fApplyColumnBalancing, out ccol, out cSegmentDefinedColumnSpanAreas, out cHeightDefinedColumnSpanAreas);
++            }
++
++            if (client.fscbk.cbkgen.pfnGetSectionColumnInfo != null)
++            {
++                nova.GetSectionColumnInfo = (pfsclient, nms, fswdir, ncol, fscolinfo, out ccol) =>
++                    (NovaPts.PtsErr)client.fscbk.cbkgen.pfnGetSectionColumnInfo(pfsclient, nms, fswdir, ncol,
++                        (PTS.FSCOLUMNINFO*)fscolinfo, out ccol);
++            }
++
++            if (client.fscbk.cbkgen.pfnGetMainTextSegment != null)
++            {
++                nova.GetMainTextSegment = (pfsclient, nmsSection, out nmSegment) =>
++                    (NovaPts.PtsErr)client.fscbk.cbkgen.pfnGetMainTextSegment(pfsclient, nmsSection, out nmSegment);
++            }
++
++            if (client.fscbk.cbkgen.pfnGetFirstPara != null)
++            {
++                nova.GetFirstPara = (pfsclient, nms, out fSuccessful, out nmp) =>
++                    (NovaPts.PtsErr)client.fscbk.cbkgen.pfnGetFirstPara(pfsclient, nms, out fSuccessful, out nmp);
++            }
++
++            if (client.fscbk.cbkgen.pfnGetNextPara != null)
++            {
++                nova.GetNextPara = (pfsclient, nms, nmpCur, out fFound, out nmpNext) =>
++                    (NovaPts.PtsErr)client.fscbk.cbkgen.pfnGetNextPara(pfsclient, nms, nmpCur, out fFound, out nmpNext);
++            }
++
++            if (client.fscbk.cbkgen.pfnGetParaProperties != null)
++            {
++                nova.GetParaProperties = (pfsclient, nmp, ref fspap) =>
++                {
++                    PTS.FSPAP wpfPap = default;
++                    wpfPap.idobj = fspap.Idobj;
++                    wpfPap.fKeepWithNext = fspap.FKeepWithNext;
++                    wpfPap.fBreakPageBefore = fspap.FBreakPageBefore;
++                    wpfPap.fBreakColumnBefore = fspap.FBreakColumnBefore;
++                    int rc = client.fscbk.cbkgen.pfnGetParaProperties(pfsclient, nmp, ref wpfPap);
++                    fspap.Idobj = wpfPap.idobj;
++                    fspap.FKeepWithNext = wpfPap.fKeepWithNext;
++                    fspap.FBreakPageBefore = wpfPap.fBreakPageBefore;
++                    fspap.FBreakColumnBefore = wpfPap.fBreakColumnBefore;
++                    return (NovaPts.PtsErr)rc;
++                };
++            }
++
++            if (client.fscbk.cbkgen.pfnCreateParaclient != null)
++            {
++                nova.CreateParaclient = (pfsclient, nmp, out pfsparaclient) =>
++                    (NovaPts.PtsErr)client.fscbk.cbkgen.pfnCreateParaclient(pfsclient, nmp, out pfsparaclient);
++            }
++
++            if (client.fscbk.cbkgen.pfnDestroyParaclient != null)
++            {
++                nova.DestroyParaclient = (pfsclient, pfsparaclient) =>
++                    (NovaPts.PtsErr)client.fscbk.cbkgen.pfnDestroyParaclient(pfsclient, pfsparaclient);
++            }
++
++            if (client.fscbk.cbktxt.pfnGetTextProperties != null)
++            {
++                nova.GetTextProperties = (pfsclient, nmp, iArea, ref fstxtprops) =>
++                {
++                    PTS.FSTXTPROPS wpfProps = default;
++                    wpfProps.fswdir = fstxtprops.Fswdir;
++                    wpfProps.dcpStartContent = fstxtprops.DcpStartContent;
++                    wpfProps.fKeepTogether = fstxtprops.FKeepTogether;
++                    wpfProps.fDropCap = fstxtprops.FDropCap;
++                    wpfProps.cMinLinesAfterBreak = fstxtprops.CMinLinesAfterBreak;
++                    wpfProps.cMinLinesBeforeBreak = fstxtprops.CMinLinesBeforeBreak;
++                    wpfProps.fVerticalGrid = fstxtprops.FVerticalGrid;
++                    wpfProps.fOptimizeParagraph = fstxtprops.FOptimizeParagraph;
++                    wpfProps.fAvoidHyphenationAtTrackBottom = fstxtprops.FAvoidHyphenationAtTrackBottom;
++                    wpfProps.fAvoidHyphenationOnLastChainElement = fstxtprops.FAvoidHyphenationOnLastChainElement;
++                    wpfProps.cMaxConsecutiveHyphens = fstxtprops.CMaxConsecutiveHyphens;
++                    int rc = client.fscbk.cbktxt.pfnGetTextProperties(pfsclient, nmp, iArea, ref wpfProps);
++                    fstxtprops.Fswdir = wpfProps.fswdir;
++                    fstxtprops.DcpStartContent = wpfProps.dcpStartContent;
++                    fstxtprops.FKeepTogether = wpfProps.fKeepTogether;
++                    fstxtprops.FDropCap = wpfProps.fDropCap;
++                    fstxtprops.CMinLinesAfterBreak = wpfProps.cMinLinesAfterBreak;
++                    fstxtprops.CMinLinesBeforeBreak = wpfProps.cMinLinesBeforeBreak;
++                    fstxtprops.FVerticalGrid = wpfProps.fVerticalGrid;
++                    fstxtprops.FOptimizeParagraph = wpfProps.fOptimizeParagraph;
++                    fstxtprops.FAvoidHyphenationAtTrackBottom = wpfProps.fAvoidHyphenationAtTrackBottom;
++                    fstxtprops.FAvoidHyphenationOnLastChainElement = wpfProps.fAvoidHyphenationOnLastChainElement;
++                    fstxtprops.CMaxConsecutiveHyphens = wpfProps.cMaxConsecutiveHyphens;
++                    return (NovaPts.PtsErr)rc;
++                };
++            }
++
++            if (client.fscbk.cbktxt.pfnFormatLine != null)
++            {
++                nova.FormatLine = (pfsclient, pfsparaclient, nmp, iArea, dcp, pbrlineIn, fswdir,
++                    urStartLine, durLine, urStartTrack, durTrack, urPageLeftMargin,
++                    fAllowHyphenation, fClearOnLeft, fClearOnRight, fTreatAsFirstInPara, fTreatAsLastInPara, fSuppressTopSpace,
++                    out pfsline, out dcpLine, out ppbrlineOut, out fForcedBroken,
++                    out fsflres, out dvrAscent, out dvrDescent, out urBBox, out durBBox,
++                    out dcpDepend, out fReformatNeighborsAsLastLine) =>
++                {
++                    PTS.FSFLRES wpfFlres = default;
++                    int rc = client.fscbk.cbktxt.pfnFormatLine(pfsclient, pfsparaclient, nmp, iArea, dcp, pbrlineIn, fswdir,
++                        urStartLine, durLine, urStartTrack, durTrack, urPageLeftMargin,
++                        fAllowHyphenation, fClearOnLeft, fClearOnRight, fTreatAsFirstInPara, fTreatAsLastInPara, fSuppressTopSpace,
++                        out pfsline, out dcpLine, out ppbrlineOut, out fForcedBroken, out wpfFlres,
++                        out dvrAscent, out dvrDescent, out urBBox, out durBBox, out dcpDepend, out fReformatNeighborsAsLastLine);
++                    fsflres = (NovaPts.FsFlres)wpfFlres;
++                    return (NovaPts.PtsErr)rc;
++                };
++            }
++
++            if (client.fscbk.cbktxt.pfnDestroyLine != null)
++            {
++                nova.DestroyLine = (pfsclient, pfsline) =>
++                    (NovaPts.PtsErr)client.fscbk.cbktxt.pfnDestroyLine(pfsclient, pfsline);
++            }
++
++            if (client.fscbk.cbktxt.pfnDestroyLineBreakRecord != null)
++            {
++                nova.DestroyLineBreakRecord = (pfsclient, pbrlineIn) =>
++                    (NovaPts.PtsErr)client.fscbk.cbktxt.pfnDestroyLineBreakRecord(pfsclient, pbrlineIn);
++            }
++
++            if (client.fscbk.cbktxt.pfnGetNumberFootnotes != null)
++            {
++                nova.GetNumberFootnotes = (pfsclient, nmp, fsdcpStart, fsdcpLim, out nFootnote) =>
++                    (NovaPts.PtsErr)client.fscbk.cbktxt.pfnGetNumberFootnotes(pfsclient, nmp, fsdcpStart, fsdcpLim, out nFootnote);
++            }
++
++            if (client.fscbk.cbkobj.pfnDestroyMcsclient != null)
++            {
++                nova.DestroyMcsclient = (pfsclient, pmcsclient) =>
++                    (NovaPts.PtsErr)client.fscbk.cbkobj.pfnDestroyMcsclient(pfsclient, pmcsclient);
++            }
++
++            return NovaPts.PtsExports.CreateDocContext(ref nova, out pfscontext);
++        }
+ #if NEVER
+         [DllImport(DllImport.PresentationNative)]
+         internal static extern int FsSetDebugFlags(
+@@ -3106,47 +3395,142 @@ internal static extern int FsSetDebugFlags(
+         // ------------------------------------------------------------------
+         // fscrpage.h
+         // ------------------------------------------------------------------
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsCreatePageFinite(
++        internal static int FsCreatePageFinite(
+             IntPtr pfscontext,                  // IN:  ptr to FS context
+             IntPtr pfsBRPageStart,              // IN:  ptr to brk record of prev. page
+             IntPtr fsnmSectStart,               // IN:  name of the section to start from, if pointer to break rec is NULL
+             out FSFMTR pfsfmtrOut,              // OUT: formatting result
+             out IntPtr ppfsPageOut,             // OUT: ptr to page, opaque to client
+-            out IntPtr ppfsBRPageOut);          // OUT: break record of the page
++            out IntPtr ppfsBRPageOut)           // OUT: break record of the page
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsCreatePageFiniteImpl(pfscontext, pfsBRPageStart, fsnmSectStart, out pfsfmtrOut, out ppfsPageOut, out ppfsBRPageOut);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsUpdateFinitePage(
++            pfsfmtrOut = default;
++            ppfsPageOut = IntPtr.Zero;
++            ppfsBRPageOut = IntPtr.Zero;
++            return PTS.fserrNotImplemented;
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsCreatePageFinite")]
++        private static extern int FsCreatePageFiniteImpl(
++            IntPtr pfscontext,
++            IntPtr pfsBRPageStart,
++            IntPtr fsnmSectStart,
++            out FSFMTR pfsfmtrOut,
++            out IntPtr ppfsPageOut,
++            out IntPtr ppfsBRPageOut);
++
++        internal static int FsUpdateFinitePage(
+             IntPtr pfscontext,                  // IN:  ptr to FS context
+             IntPtr pfspage,                     // IN:  ptr to page to update
+             IntPtr pfsBRPageStart,              // IN:  ptr to brk record of prev. page
+             IntPtr fsnmSectStart,               // IN:  name of the section to start from, if pointer to break rec is NULL
+             out FSFMTR pfsfmtrOut,              // OUT: formatting result
+-            out IntPtr ppfsBRPageOut);          // OUT: break record of the page
++            out IntPtr ppfsBRPageOut)           // OUT: break record of the page
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsUpdateFinitePageImpl(pfscontext, pfspage, pfsBRPageStart, fsnmSectStart, out pfsfmtrOut, out ppfsBRPageOut);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsCreatePageBottomless(
++            pfsfmtrOut = default;
++            ppfsBRPageOut = IntPtr.Zero;
++            return PTS.fserrNotImplemented;
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsUpdateFinitePage")]
++        private static extern int FsUpdateFinitePageImpl(
++            IntPtr pfscontext,
++            IntPtr pfspage,
++            IntPtr pfsBRPageStart,
++            IntPtr fsnmSectStart,
++            out FSFMTR pfsfmtrOut,
++            out IntPtr ppfsBRPageOut);
++
++        internal static int FsCreatePageBottomless(
+             IntPtr pfscontext,                  // IN:  ptr to FS context
+             IntPtr fsnmsect,                    // IN:  name of the section to start from
+             out FSFMTRBL pfsfmtrbl,             // OUT: formatting result
+-            out IntPtr ppfspage);               // OUT: ptr to page, opaque to client
++            out IntPtr ppfspage)                // OUT: ptr to page, opaque to client
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsCreatePageBottomlessImpl(pfscontext, fsnmsect, out pfsfmtrbl, out ppfspage);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsUpdateBottomlessPage(
++            NovaPts.FsFmtResult novaFmt;
++            int rc = NovaPts.PtsExports.FsCreatePageBottomless(pfscontext, fsnmsect, out novaFmt, out ppfspage);
++            pfsfmtrbl = (FSFMTRBL)novaFmt;
++            return rc;
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsCreatePageBottomless")]
++        private static extern int FsCreatePageBottomlessImpl(
++            IntPtr pfscontext,
++            IntPtr fsnmsect,
++            out FSFMTRBL pfsfmtrbl,
++            out IntPtr ppfspage);
++
++        internal static int FsUpdateBottomlessPage(
+             IntPtr pfscontext,                  // IN:  ptr to FS context
+             IntPtr pfspage,                     // IN:  ptr to page to update
+             IntPtr fsnmsect,                    // IN:  name of the section to start from
+-            out FSFMTRBL pfsfmtrbl);            // OUT: formatting result
++            out FSFMTRBL pfsfmtrbl)             // OUT: formatting result
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsUpdateBottomlessPageImpl(pfscontext, pfspage, fsnmsect, out pfsfmtrbl);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsClearUpdateInfoInPage(
++            NovaPts.FsFmtResult novaFmt;
++            int rc = NovaPts.PtsExports.FsUpdateBottomlessPage(pfscontext, pfspage, fsnmsect, out novaFmt);
++            pfsfmtrbl = (FSFMTRBL)novaFmt;
++            return rc;
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsUpdateBottomlessPage")]
++        private static extern int FsUpdateBottomlessPageImpl(
++            IntPtr pfscontext,
++            IntPtr pfspage,
++            IntPtr fsnmsect,
++            out FSFMTRBL pfsfmtrbl);
++
++        internal static int FsClearUpdateInfoInPage(
+             IntPtr pfscontext,                  // IN:  ptr to FS context
+-            IntPtr pfspage);                    // IN:  ptr to page to clear
++            IntPtr pfspage)                     // IN:  ptr to page to clear
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsClearUpdateInfoInPageImpl(pfscontext, pfspage);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsDestroyPage(
++            return NovaPts.PtsExports.FsClearUpdateInfoInPage(pfscontext, pfspage);
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsClearUpdateInfoInPage")]
++        private static extern int FsClearUpdateInfoInPageImpl(
++            IntPtr pfscontext,
++            IntPtr pfspage);
++
++        internal static int FsDestroyPage(
+             IntPtr pfscontext,                  // IN:  ptr to FS context
+-            IntPtr pfspage);                    // IN:  ptr to page
++            IntPtr pfspage)                     // IN:  ptr to page
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsDestroyPageImpl(pfscontext, pfspage);
++            }
++
++            return NovaPts.PtsExports.FsDestroyPage(pfscontext, pfspage);
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsDestroyPage")]
++        private static extern int FsDestroyPageImpl(
++            IntPtr pfscontext,
++            IntPtr pfspage);
+ 
+ #if NEVER
+ [DllImport(DllImport.PresentationNative)]//CASRemoval:
+@@ -3156,10 +3540,22 @@ internal static extern int FsDuplicatePageBreakRecord(
+     out IntPtr ppfsbreakrecpage);   // OUT: ptr to duplicate break record
+ #endif
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsDestroyPageBreakRecord(
++        internal static int FsDestroyPageBreakRecord(
+             IntPtr pfscontext,                  // IN:  ptr to FS context
+-            IntPtr pfsbreakrec);                // IN:  ptr to page break record
++            IntPtr pfsbreakrec)                 // IN:  ptr to page break record
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsDestroyPageBreakRecordImpl(pfscontext, pfsbreakrec);
++            }
++
++            return NovaPts.PtsExports.FsDestroyPageBreakRecord(pfscontext, pfsbreakrec);
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsDestroyPageBreakRecord")]
++        private static extern int FsDestroyPageBreakRecordImpl(
++            IntPtr pfscontext,
++            IntPtr pfsbreakrec);
+ 
+         // ------------------------------------------------------------------
+         // fscrsubp.h
+@@ -3314,8 +3710,7 @@ internal static extern int FsTransferDisplayInfoSubpage(
+         // ------------------------------------------------------------------
+         // fscrsubtrack.h
+         // ------------------------------------------------------------------
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsFormatSubtrackFinite(
++        internal static int FsFormatSubtrackFinite(
+             IntPtr pfsContext,                  // IN:  ptr to FS context
+             IntPtr pfsBRSubtackIn,              // IN:  ptr to brk record of subtrack
+             int fFromPreviousPage,              // IN:  break record was created on previous page
+@@ -3338,10 +3733,50 @@ internal static extern int FsFormatSubtrackFinite(
+             out FSBBOX pfsBBox,                 // OUT: subtrack bbox
+             out IntPtr ppfsMcsClientOut,        // OUT: margin collapsing state at the bottom
+             out FSKCLEAR pfsKClearOut,          // OUT: ClearIn for the next paragraph
+-            out int pTopSpace);                 // OUT: top space due to collapsed margin
++            out int pTopSpace)                  // OUT: top space due to collapsed margin
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsFormatSubtrackFiniteImpl(pfsContext, pfsBRSubtackIn, fFromPreviousPage, fsnmSegment, iArea, pfsFtnRej, pfsGeom, fEmptyOk, fSuppressTopSpace, fswdir, ref fsRectToFill, pfsMcsClientIn, fsKClearIn, fsksuppresshardbreakbeforefirstpara, out pfsfmtr, out ppfsSubtrack, out pfsBRSubtrackOut, out pdvrUsed, out pfsBBox, out ppfsMcsClientOut, out pfsKClearOut, out pTopSpace);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsFormatSubtrackBottomless(
++            pfsfmtr = default;
++            ppfsSubtrack = IntPtr.Zero;
++            pfsBRSubtrackOut = IntPtr.Zero;
++            pdvrUsed = 0;
++            pfsBBox = default;
++            ppfsMcsClientOut = IntPtr.Zero;
++            pfsKClearOut = default;
++            pTopSpace = 0;
++            return PTS.fserrNotImplemented;
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsFormatSubtrackFinite")]
++        private static extern int FsFormatSubtrackFiniteImpl(
++            IntPtr pfsContext,
++            IntPtr pfsBRSubtackIn,
++            int fFromPreviousPage,
++            IntPtr fsnmSegment,
++            int iArea,
++            IntPtr pfsFtnRej,
++            IntPtr pfsGeom,
++            int fEmptyOk,
++            int fSuppressTopSpace,
++            uint fswdir,
++            [In] ref FSRECT fsRectToFill,
++            IntPtr pfsMcsClientIn,
++            FSKCLEAR fsKClearIn,
++            FSKSUPPRESSHARDBREAKBEFOREFIRSTPARA fsksuppresshardbreakbeforefirstpara,
++            out FSFMTR pfsfmtr,
++            out IntPtr ppfsSubtrack,
++            out IntPtr pfsBRSubtrackOut,
++            out int pdvrUsed,
++            out FSBBOX pfsBBox,
++            out IntPtr ppfsMcsClientOut,
++            out FSKCLEAR pfsKClearOut,
++            out int pTopSpace);
++
++        internal static int FsFormatSubtrackBottomless(
+             IntPtr pfsContext,                  // IN:  ptr to FS context
+             IntPtr fsnmSegment,                 // IN:  name of the segment to start from
+             int iArea,                          // IN:  column-span area index
+@@ -3361,10 +3796,50 @@ internal static extern int FsFormatSubtrackBottomless(
+             out IntPtr ppfsMcsClientOut,        // OUT: margin collapsing state at the bottom
+             out FSKCLEAR pfsKClearOut,          // OUT: ClearIn for the next paragraph
+             out int pTopSpace,                  // OUT: top space due to collapsed margin
+-            out int pfCanBeInterruptedOut);     // OUT: interruption is prohibited from now on
++            out int pfCanBeInterruptedOut)      // OUT: interruption is prohibited from now on
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsFormatSubtrackBottomlessImpl(pfsContext, fsnmSegment, iArea, pfsGeom, fSuppressTopSpace, fswdir, ur, dur, vr, pfsMcsClientIn, fsKClearIn, fCanBeInterruptedIn, out pfsfmtrbl, out ppfsSubtrack, out pdvrUsed, out pfsBBox, out ppfsMcsClientOut, out pfsKClearOut, out pTopSpace, out pfCanBeInterruptedOut);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsUpdateBottomlessSubtrack(
++            NovaPts.FsFmtResult novaFmt;
++            NovaPts.FsBbox novaBbox;
++            int rc = NovaPts.PtsExports.FsFormatSubtrackBottomless(pfsContext, fsnmSegment, iArea, pfsGeom, fSuppressTopSpace, fswdir, ur, dur, vr, pfsMcsClientIn, (int)fsKClearIn, fCanBeInterruptedIn, out novaFmt, out ppfsSubtrack, out pdvrUsed, out novaBbox, out ppfsMcsClientOut, out int novaKClearOut, out pTopSpace, out pfCanBeInterruptedOut);
++            pfsfmtrbl = (FSFMTRBL)novaFmt;
++            pfsBBox.fDefined = novaBbox.FDefined;
++            pfsBBox.fsrc.u = novaBbox.Fsrc.U;
++            pfsBBox.fsrc.v = novaBbox.Fsrc.V;
++            pfsBBox.fsrc.du = novaBbox.Fsrc.DU;
++            pfsBBox.fsrc.dv = novaBbox.Fsrc.DV;
++            pfsKClearOut = (FSKCLEAR)novaKClearOut;
++            return rc;
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsFormatSubtrackBottomless")]
++        private static extern int FsFormatSubtrackBottomlessImpl(
++            IntPtr pfsContext,
++            IntPtr fsnmSegment,
++            int iArea,
++            IntPtr pfsGeom,
++            int fSuppressTopSpace,
++            uint fswdir,
++            int ur,
++            int dur,
++            int vr,
++            IntPtr pfsMcsClientIn,
++            FSKCLEAR fsKClearIn,
++            int fCanBeInterruptedIn,
++            out FSFMTRBL pfsfmtrbl,
++            out IntPtr ppfsSubtrack,
++            out int pdvrUsed,
++            out FSBBOX pfsBBox,
++            out IntPtr ppfsMcsClientOut,
++            out FSKCLEAR pfsKClearOut,
++            out int pTopSpace,
++            out int pfCanBeInterruptedOut);
++
++        internal static int FsUpdateBottomlessSubtrack(
+             IntPtr pfsContext,                  // IN:  ptr to FS context
+             IntPtr pfsSubtrack,                 // IN:  ptr to subtrack
+             IntPtr fsnmSegment,                 // IN:  name of the segment to start from
+@@ -3384,54 +3859,194 @@ internal static extern int FsUpdateBottomlessSubtrack(
+             out IntPtr ppfsMcsClientOut,        // OUT: margin collapsing state at the bottom
+             out FSKCLEAR pfsKClearOut,          // OUT: ClearIn for the next paragraph
+             out int pTopSpace,                  // OUT: top space due to collapsed margin
+-            out int pfCanBeInterruptedOut);     // OUT: interruption is prohibited from now on
++            out int pfCanBeInterruptedOut)      // OUT: interruption is prohibited from now on
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsUpdateBottomlessSubtrackImpl(pfsContext, pfsSubtrack, fsnmSegment, iArea, pfsGeom, fSuppressTopSpace, fswdir, ur, dur, vr, pfsMcsClientIn, fsKClearIn, fCanBeInterruptedIn, out pfsfmtrbl, out pdvrUsed, out pfsBBox, out ppfsMcsClientOut, out pfsKClearOut, out pTopSpace, out pfCanBeInterruptedOut);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsSynchronizeBottomlessSubtrack(
++            pfsfmtrbl = default;
++            pdvrUsed = 0;
++            pfsBBox = default;
++            ppfsMcsClientOut = IntPtr.Zero;
++            pfsKClearOut = default;
++            pTopSpace = 0;
++            pfCanBeInterruptedOut = 0;
++            return PTS.fserrNotImplemented;
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsUpdateBottomlessSubtrack")]
++        private static extern int FsUpdateBottomlessSubtrackImpl(
++            IntPtr pfsContext,
++            IntPtr pfsSubtrack,
++            IntPtr fsnmSegment,
++            int iArea,
++            IntPtr pfsGeom,
++            int fSuppressTopSpace,
++            uint fswdir,
++            int ur,
++            int dur,
++            int vr,
++            IntPtr pfsMcsClientIn,
++            FSKCLEAR fsKClearIn,
++            int fCanBeInterruptedIn,
++            out FSFMTRBL pfsfmtrbl,
++            out int pdvrUsed,
++            out FSBBOX pfsBBox,
++            out IntPtr ppfsMcsClientOut,
++            out FSKCLEAR pfsKClearOut,
++            out int pTopSpace,
++            out int pfCanBeInterruptedOut);
++
++        internal static int FsSynchronizeBottomlessSubtrack(
+             IntPtr pfsContext,                  // IN:  ptr to FS context
+             IntPtr pfsSubtrack,                 // IN:  ptr to subtrack
+             IntPtr pfsGeom,                     // IN:  geometry
+             uint fswdir,                        // IN:  direction
+-            int vrShift);                       // IN:  shift by this value
++            int vrShift)                        // IN:  shift by this value
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsSynchronizeBottomlessSubtrackImpl(pfsContext, pfsSubtrack, pfsGeom, fswdir, vrShift);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsCompareSubtrack(
++            return PTS.fserrNotImplemented;
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsSynchronizeBottomlessSubtrack")]
++        private static extern int FsSynchronizeBottomlessSubtrackImpl(
++            IntPtr pfsContext,
++            IntPtr pfsSubtrack,
++            IntPtr pfsGeom,
++            uint fswdir,
++            int vrShift);
++
++        internal static int FsCompareSubtrack(
+             IntPtr pfsContext,                  // IN:  ptr to FS context
+             IntPtr pfsSubtrackOld,              // IN:  ptr to old subtrack
+             IntPtr pfsSubtrackNew,              // IN:  ptr to new subtrack
+             uint fswdir,                        // IN:  fswdir
+             out FSCOMPRESULT fsCompResult,      // OUT: comparison result
+-            out int dvrShifted);                // OUT: dvrShifted if result is fscmprShifted
++            out int dvrShifted)                 // OUT: dvrShifted if result is fscmprShifted
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsCompareSubtrackImpl(pfsContext, pfsSubtrackOld, pfsSubtrackNew, fswdir, out fsCompResult, out dvrShifted);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsClearUpdateInfoInSubtrack(
++            fsCompResult = default;
++            dvrShifted = 0;
++            return PTS.fserrNotImplemented;
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsCompareSubtrack")]
++        private static extern int FsCompareSubtrackImpl(
++            IntPtr pfsContext,
++            IntPtr pfsSubtrackOld,
++            IntPtr pfsSubtrackNew,
++            uint fswdir,
++            out FSCOMPRESULT fsCompResult,
++            out int dvrShifted);
++
++        internal static int FsClearUpdateInfoInSubtrack(
+             IntPtr pfsContext,                  // IN:  ptr to FS context
+-            IntPtr pfsSubtrack);                // IN:  ptr to subtrack
++            IntPtr pfsSubtrack)                 // IN:  ptr to subtrack
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsClearUpdateInfoInSubtrackImpl(pfsContext, pfsSubtrack);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsDestroySubtrack(
++            return NovaPts.PtsExports.FsClearUpdateInfoInSubtrack(pfsContext, pfsSubtrack);
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsClearUpdateInfoInSubtrack")]
++        private static extern int FsClearUpdateInfoInSubtrackImpl(
++            IntPtr pfsContext,
++            IntPtr pfsSubtrack);
++
++        internal static int FsDestroySubtrack(
+             IntPtr pfsContext,                  // IN:  ptr to FS context
+-            IntPtr pfsSubtrack);                // IN:  ptr to subtrack
++            IntPtr pfsSubtrack)                 // IN:  ptr to subtrack
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsDestroySubtrackImpl(pfsContext, pfsSubtrack);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsDuplicateSubtrackBreakRecord(
++            return NovaPts.PtsExports.FsDestroySubtrack(pfsContext, pfsSubtrack);
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsDestroySubtrack")]
++        private static extern int FsDestroySubtrackImpl(
++            IntPtr pfsContext,
++            IntPtr pfsSubtrack);
++
++        internal static int FsDuplicateSubtrackBreakRecord(
+             IntPtr pfsContext,                  // IN:  ptr to FS context
+             IntPtr pfsBRSubtrackIn,             // IN:  ptr to brk record of subtrack
+-            out IntPtr ppfsBRSubtrackOut);      // OUT: ptr to duplicate break record
++            out IntPtr ppfsBRSubtrackOut)       // OUT: ptr to duplicate break record
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsDuplicateSubtrackBreakRecordImpl(pfsContext, pfsBRSubtrackIn, out ppfsBRSubtrackOut);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsDestroySubtrackBreakRecord(
++            ppfsBRSubtrackOut = IntPtr.Zero;
++            return PTS.fserrNotImplemented;
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsDuplicateSubtrackBreakRecord")]
++        private static extern int FsDuplicateSubtrackBreakRecordImpl(
++            IntPtr pfsContext,
++            IntPtr pfsBRSubtrackIn,
++            out IntPtr ppfsBRSubtrackOut);
++
++        internal static int FsDestroySubtrackBreakRecord(
+             IntPtr pfscontext,                  // IN:  ptr to FS context
+-            IntPtr pfsbreakrec);                // IN:  ptr to subtrack break record
++            IntPtr pfsbreakrec)                 // IN:  ptr to subtrack break record
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsDestroySubtrackBreakRecordImpl(pfscontext, pfsbreakrec);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsGetSubtrackColumnBalancingInfo(
++            return NovaPts.PtsExports.FsDestroySubtrackBreakRecord(pfscontext, pfsbreakrec);
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsDestroySubtrackBreakRecord")]
++        private static extern int FsDestroySubtrackBreakRecordImpl(
++            IntPtr pfscontext,
++            IntPtr pfsbreakrec);
++
++        internal static int FsGetSubtrackColumnBalancingInfo(
+             IntPtr pfscontext,                  // IN:  ptr to FS context
+             IntPtr pfsSubtrack,                 // IN:  ptr to subtrack
+             uint fswdir,                        // IN:  fswdir
+             out int lLineNumber,                // OUT: number of text lines
+             out int lLineHeights,               // OUT: sum of all line heights
+-            out int lMinimumLineHeight);        // OUT: minimum line height
++            out int lMinimumLineHeight)         // OUT: minimum line height
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsGetSubtrackColumnBalancingInfoImpl(pfscontext, pfsSubtrack, fswdir, out lLineNumber, out lLineHeights, out lMinimumLineHeight);
++            }
++
++            lLineNumber = 0;
++            lLineHeights = 0;
++            lMinimumLineHeight = 0;
++            return PTS.fserrNotImplemented;
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsGetSubtrackColumnBalancingInfo")]
++        private static extern int FsGetSubtrackColumnBalancingInfoImpl(
++            IntPtr pfscontext,
++            IntPtr pfsSubtrack,
++            uint fswdir,
++            out int lLineNumber,
++            out int lLineHeights,
++            out int lMinimumLineHeight);
+ 
+         [DllImport(DllImport.PresentationNative)]
+         internal static extern int FsGetNumberSubtrackFootnotes(
+@@ -3589,11 +4204,43 @@ FSERR FSAPI FsGetIntervals(
+         // ------------------------------------------------------------------
+         // fsquery.h
+         // ------------------------------------------------------------------
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsQueryPageDetails(
++        internal static int FsQueryPageDetails(
+             IntPtr pfsContext,                  // IN:  ptr to FS context
+             IntPtr pPage,                       // IN:  ptr to page
+-            out FSPAGEDETAILS pPageDetails);    // OUT: page details
++            out FSPAGEDETAILS pPageDetails)     // OUT: page details
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsQueryPageDetailsImpl(pfsContext, pPage, out pPageDetails);
++            }
++
++            NovaPts.FsPageDetails novaDetails;
++            int rc = NovaPts.PtsExports.FsQueryPageDetails(pfsContext, pPage, out novaDetails);
++            pPageDetails = default;
++            pPageDetails.fskupd = (FSKUPDATE)novaDetails.Fskupd;
++            pPageDetails.fSimple = novaDetails.FSimple;
++            pPageDetails.u.simple.trackdescr.fsupdinf.fskupd = (FSKUPDATE)novaDetails.Simple.Trackdescr.Fsupdinf.Fskupd;
++            pPageDetails.u.simple.trackdescr.fsupdinf.dvrShifted = novaDetails.Simple.Trackdescr.Fsupdinf.DvrShifted;
++            pPageDetails.u.simple.trackdescr.nms = novaDetails.Simple.Trackdescr.Nms;
++            pPageDetails.u.simple.trackdescr.fsrc.u = novaDetails.Simple.Trackdescr.Fsrc.U;
++            pPageDetails.u.simple.trackdescr.fsrc.v = novaDetails.Simple.Trackdescr.Fsrc.V;
++            pPageDetails.u.simple.trackdescr.fsrc.du = novaDetails.Simple.Trackdescr.Fsrc.DU;
++            pPageDetails.u.simple.trackdescr.fsrc.dv = novaDetails.Simple.Trackdescr.Fsrc.DV;
++            pPageDetails.u.simple.trackdescr.fsbbox.fDefined = novaDetails.Simple.Trackdescr.Fsbbox.FDefined;
++            pPageDetails.u.simple.trackdescr.fsbbox.fsrc.u = novaDetails.Simple.Trackdescr.Fsbbox.Fsrc.U;
++            pPageDetails.u.simple.trackdescr.fsbbox.fsrc.v = novaDetails.Simple.Trackdescr.Fsbbox.Fsrc.V;
++            pPageDetails.u.simple.trackdescr.fsbbox.fsrc.du = novaDetails.Simple.Trackdescr.Fsbbox.Fsrc.DU;
++            pPageDetails.u.simple.trackdescr.fsbbox.fsrc.dv = novaDetails.Simple.Trackdescr.Fsbbox.Fsrc.DV;
++            pPageDetails.u.simple.trackdescr.fTrackRelativeToRect = novaDetails.Simple.Trackdescr.FTrackRelativeToRect;
++            pPageDetails.u.simple.trackdescr.pfstrack = novaDetails.Simple.Trackdescr.Pfstrack;
++            return rc;
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsQueryPageDetails")]
++        private static extern int FsQueryPageDetailsImpl(
++            IntPtr pfsContext,
++            IntPtr pPage,
++            out FSPAGEDETAILS pPageDetails);
+ 
+ #if NEVER
+ FSERR FSAPI FsQueryPageFootnoteColumnList(
+@@ -3616,27 +4263,112 @@ FSERR FSAPI FsQueryFootnoteColumnTrackList(
+             LONG*);                     /* OUT: actual number of tracks                 */
+ #endif
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern unsafe int FsQueryPageSectionList(
++        internal static unsafe int FsQueryPageSectionList(
+             IntPtr pfsContext,                  // IN:  ptr to FS context
+             IntPtr pPage,                       // IN:  ptr to page
+             int cArraySize,                     // IN:  size of array of section descriptions
+             FSSECTIONDESCRIPTION* rgSectionDescription, // OUT: array of section descriptions
+-            out int cActualSize);               // OUT: actual number of sections
++            out int cActualSize)                // OUT: actual number of sections
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsQueryPageSectionListImpl(pfsContext, pPage, cArraySize, rgSectionDescription, out cActualSize);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsQuerySectionDetails(
++            return NovaPts.PtsExports.FsQueryPageSectionList(pfsContext, pPage, cArraySize, (NovaPts.FsSectionDescription*)rgSectionDescription, out cActualSize);
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsQueryPageSectionList")]
++        private static extern unsafe int FsQueryPageSectionListImpl(
++            IntPtr pfsContext,
++            IntPtr pPage,
++            int cArraySize,
++            FSSECTIONDESCRIPTION* rgSectionDescription,
++            out int cActualSize);
++
++        internal static int FsQuerySectionDetails(
+             IntPtr pfsContext,                  // IN:  ptr to FS context
+             IntPtr pSection,                    // IN:  ptr to section
+-            out FSSECTIONDETAILS pSectionDetails); // OUT: section details
++            out FSSECTIONDETAILS pSectionDetails) // OUT: section details
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsQuerySectionDetailsImpl(pfsContext, pSection, out pSectionDetails);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern unsafe int FsQuerySectionBasicColumnList(
++            NovaPts.FsSectionDetails novaDetails;
++            int rc = NovaPts.PtsExports.FsQuerySectionDetails(pfsContext, pSection, out novaDetails);
++            pSectionDetails = default;
++            pSectionDetails.fFootnotesAsPagenotes = novaDetails.FFootnotesAsPagenotes;
++            pSectionDetails.u.withpagenotes.fswdir = novaDetails.WithPageNotes.Fswdir;
++            pSectionDetails.u.withpagenotes.fColumnBalancingApplied = novaDetails.WithPageNotes.FColumnBalancingApplied;
++            pSectionDetails.u.withpagenotes.fsrcSectionBody.u = novaDetails.WithPageNotes.FsrcSectionBody.U;
++            pSectionDetails.u.withpagenotes.fsrcSectionBody.v = novaDetails.WithPageNotes.FsrcSectionBody.V;
++            pSectionDetails.u.withpagenotes.fsrcSectionBody.du = novaDetails.WithPageNotes.FsrcSectionBody.DU;
++            pSectionDetails.u.withpagenotes.fsrcSectionBody.dv = novaDetails.WithPageNotes.FsrcSectionBody.DV;
++            pSectionDetails.u.withpagenotes.fsbboxSectionBody.fDefined = novaDetails.WithPageNotes.FsbboxSectionBody.FDefined;
++            pSectionDetails.u.withpagenotes.fsbboxSectionBody.fsrc.u = novaDetails.WithPageNotes.FsbboxSectionBody.Fsrc.U;
++            pSectionDetails.u.withpagenotes.fsbboxSectionBody.fsrc.v = novaDetails.WithPageNotes.FsbboxSectionBody.Fsrc.V;
++            pSectionDetails.u.withpagenotes.fsbboxSectionBody.fsrc.du = novaDetails.WithPageNotes.FsbboxSectionBody.Fsrc.DU;
++            pSectionDetails.u.withpagenotes.fsbboxSectionBody.fsrc.dv = novaDetails.WithPageNotes.FsbboxSectionBody.Fsrc.DV;
++            pSectionDetails.u.withpagenotes.cBasicColumns = novaDetails.WithPageNotes.CBasicColumns;
++            pSectionDetails.u.withpagenotes.cSegmentDefinedColumnSpanAreas = novaDetails.WithPageNotes.CSegmentDefinedColumnSpanAreas;
++            pSectionDetails.u.withpagenotes.cHeightDefinedColumnSpanAreas = novaDetails.WithPageNotes.CHeightDefinedColumnSpanAreas;
++            pSectionDetails.u.withpagenotes.fsrcEndnote.u = novaDetails.WithPageNotes.FsrcEndnote.U;
++            pSectionDetails.u.withpagenotes.fsrcEndnote.v = novaDetails.WithPageNotes.FsrcEndnote.V;
++            pSectionDetails.u.withpagenotes.fsrcEndnote.du = novaDetails.WithPageNotes.FsrcEndnote.DU;
++            pSectionDetails.u.withpagenotes.fsrcEndnote.dv = novaDetails.WithPageNotes.FsrcEndnote.DV;
++            pSectionDetails.u.withpagenotes.fsbboxEndnote.fDefined = novaDetails.WithPageNotes.FsbboxEndnote.FDefined;
++            pSectionDetails.u.withpagenotes.fsbboxEndnote.fsrc.u = novaDetails.WithPageNotes.FsbboxEndnote.Fsrc.U;
++            pSectionDetails.u.withpagenotes.fsbboxEndnote.fsrc.v = novaDetails.WithPageNotes.FsbboxEndnote.Fsrc.V;
++            pSectionDetails.u.withpagenotes.fsbboxEndnote.fsrc.du = novaDetails.WithPageNotes.FsbboxEndnote.Fsrc.DU;
++            pSectionDetails.u.withpagenotes.fsbboxEndnote.fsrc.dv = novaDetails.WithPageNotes.FsbboxEndnote.Fsrc.DV;
++            pSectionDetails.u.withpagenotes.cEndnoteColumns = novaDetails.WithPageNotes.CEndnoteColumns;
++            pSectionDetails.u.withpagenotes.trackdescrEndnoteSeparator.fsupdinf.fskupd = (FSKUPDATE)novaDetails.WithPageNotes.TrackdescrEndnoteSeparator.Fsupdinf.Fskupd;
++            pSectionDetails.u.withpagenotes.trackdescrEndnoteSeparator.fsupdinf.dvrShifted = novaDetails.WithPageNotes.TrackdescrEndnoteSeparator.Fsupdinf.DvrShifted;
++            pSectionDetails.u.withpagenotes.trackdescrEndnoteSeparator.nms = novaDetails.WithPageNotes.TrackdescrEndnoteSeparator.Nms;
++            pSectionDetails.u.withpagenotes.trackdescrEndnoteSeparator.fsrc.u = novaDetails.WithPageNotes.TrackdescrEndnoteSeparator.Fsrc.U;
++            pSectionDetails.u.withpagenotes.trackdescrEndnoteSeparator.fsrc.v = novaDetails.WithPageNotes.TrackdescrEndnoteSeparator.Fsrc.V;
++            pSectionDetails.u.withpagenotes.trackdescrEndnoteSeparator.fsrc.du = novaDetails.WithPageNotes.TrackdescrEndnoteSeparator.Fsrc.DU;
++            pSectionDetails.u.withpagenotes.trackdescrEndnoteSeparator.fsrc.dv = novaDetails.WithPageNotes.TrackdescrEndnoteSeparator.Fsrc.DV;
++            pSectionDetails.u.withpagenotes.trackdescrEndnoteSeparator.fsbbox.fDefined = novaDetails.WithPageNotes.TrackdescrEndnoteSeparator.Fsbbox.FDefined;
++            pSectionDetails.u.withpagenotes.trackdescrEndnoteSeparator.fsbbox.fsrc.u = novaDetails.WithPageNotes.TrackdescrEndnoteSeparator.Fsbbox.Fsrc.U;
++            pSectionDetails.u.withpagenotes.trackdescrEndnoteSeparator.fsbbox.fsrc.v = novaDetails.WithPageNotes.TrackdescrEndnoteSeparator.Fsbbox.Fsrc.V;
++            pSectionDetails.u.withpagenotes.trackdescrEndnoteSeparator.fsbbox.fsrc.du = novaDetails.WithPageNotes.TrackdescrEndnoteSeparator.Fsbbox.Fsrc.DU;
++            pSectionDetails.u.withpagenotes.trackdescrEndnoteSeparator.fsbbox.fsrc.dv = novaDetails.WithPageNotes.TrackdescrEndnoteSeparator.Fsbbox.Fsrc.DV;
++            pSectionDetails.u.withpagenotes.trackdescrEndnoteSeparator.fTrackRelativeToRect = novaDetails.WithPageNotes.TrackdescrEndnoteSeparator.FTrackRelativeToRect;
++            pSectionDetails.u.withpagenotes.trackdescrEndnoteSeparator.pfstrack = novaDetails.WithPageNotes.TrackdescrEndnoteSeparator.Pfstrack;
++            return rc;
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsQuerySectionDetails")]
++        private static extern int FsQuerySectionDetailsImpl(
++            IntPtr pfsContext,
++            IntPtr pSection,
++            out FSSECTIONDETAILS pSectionDetails);
++
++        internal static unsafe int FsQuerySectionBasicColumnList(
+             IntPtr pfsContext,                  // IN:  ptr to FS context
+             IntPtr pSection,                    // IN:  ptr to section
+             int cArraySize,                     // IN:  size of array of track descriptions
+             FSTRACKDESCRIPTION* rgColumnDescription, // OUT: array of track descriptions
+-            out int cActualSize);               // OUT: actual number of tracks
++            out int cActualSize)                // OUT: actual number of tracks
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsQuerySectionBasicColumnListImpl(pfsContext, pSection, cArraySize, rgColumnDescription, out cActualSize);
++            }
++
++            return NovaPts.PtsExports.FsQuerySectionBasicColumnList(pfsContext, pSection, cArraySize, (NovaPts.FsTrackDescription*)rgColumnDescription, out cActualSize);
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsQuerySectionBasicColumnList")]
++        private static extern unsafe int FsQuerySectionBasicColumnListImpl(
++            IntPtr pfsContext,
++            IntPtr pSection,
++            int cArraySize,
++            FSTRACKDESCRIPTION* rgColumnDescription,
++            out int cActualSize);
+ #if NEVER
+         [DllImport(DllImport.PresentationNative)]
+         internal static extern unsafe int FsQuerySegmentDefinedColumnSpanAreaList(
+@@ -3686,19 +4418,51 @@ FSERR FSAPI FsQueryCompositeColumnFootnoteList(
+             LONG*);                     /* OUT: actual number of footnotes              */
+ #endif
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsQueryTrackDetails(
++        internal static int FsQueryTrackDetails(
+             IntPtr pfsContext,                  // IN:  ptr to FS context
+             IntPtr pTrack,                      // IN:  ptr to track
+-            out FSTRACKDETAILS pTrackDetails);  // OUT: track details
++            out FSTRACKDETAILS pTrackDetails)   // OUT: track details
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsQueryTrackDetailsImpl(pfsContext, pTrack, out pTrackDetails);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern unsafe int FsQueryTrackParaList(
++            NovaPts.FsTrackDetails novaDetails;
++            int rc = NovaPts.PtsExports.FsQueryTrackDetails(pfsContext, pTrack, out novaDetails);
++            pTrackDetails = default;
++            pTrackDetails.cParas = novaDetails.CParas;
++            return rc;
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsQueryTrackDetails")]
++        private static extern int FsQueryTrackDetailsImpl(
++            IntPtr pfsContext,
++            IntPtr pTrack,
++            out FSTRACKDETAILS pTrackDetails);
++
++        internal static unsafe int FsQueryTrackParaList(
+             IntPtr pfsContext,                  // IN:  ptr to FS context
+             IntPtr pTrack,                      // IN:  ptr to track
+             int cParas,                         // IN:  size of array of para descriptions
+             FSPARADESCRIPTION* rgParaDesc,      // OUT: array of para descriptions
+-            out int cParaDesc);                 // OUT: actual number of paragraphs
++            out int cParaDesc)                  // OUT: actual number of paragraphs
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsQueryTrackParaListImpl(pfsContext, pTrack, cParas, rgParaDesc, out cParaDesc);
++            }
++
++            return NovaPts.PtsExports.FsQueryTrackParaList(pfsContext, pTrack, cParas, (NovaPts.FsParaDescription*)rgParaDesc, out cParaDesc);
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsQueryTrackParaList")]
++        private static extern unsafe int FsQueryTrackParaListImpl(
++            IntPtr pfsContext,
++            IntPtr pTrack,
++            int cParas,
++            FSPARADESCRIPTION* rgParaDesc,
++            out int cParaDesc);
+ 
+         [DllImport(DllImport.PresentationNative)]
+         internal static extern unsafe int FsQuerySubpageDetails(
+@@ -3732,33 +4496,122 @@ internal static extern unsafe int FsQuerySubpageHeightDefinedColumnSpanAreaList(
+             out int cActualSize);               // OUT: actual number of height-defined areas
+ #endif
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsQuerySubtrackDetails(
++        internal static int FsQuerySubtrackDetails(
+             IntPtr pfsContext,                  // IN:  ptr to FS context
+             IntPtr pSubTrack,                   // IN:  ptr to subtrack
+-            out FSSUBTRACKDETAILS pSubTrackDetails);// OUT: subpage details
++            out FSSUBTRACKDETAILS pSubTrackDetails)// OUT: subpage details
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsQuerySubtrackDetailsImpl(pfsContext, pSubTrack, out pSubTrackDetails);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern unsafe int FsQuerySubtrackParaList(
++            NovaPts.FsSubtrackDetails novaDetails;
++            int rc = NovaPts.PtsExports.FsQuerySubtrackDetails(pfsContext, pSubTrack, out novaDetails);
++            pSubTrackDetails = default;
++            pSubTrackDetails.fsupdinf.fskupd = (FSKUPDATE)novaDetails.Fsupdinf.Fskupd;
++            pSubTrackDetails.fsupdinf.dvrShifted = novaDetails.Fsupdinf.DvrShifted;
++            pSubTrackDetails.nms = novaDetails.Nms;
++            pSubTrackDetails.fsrc.u = novaDetails.Fsrc.U;
++            pSubTrackDetails.fsrc.v = novaDetails.Fsrc.V;
++            pSubTrackDetails.fsrc.du = novaDetails.Fsrc.DU;
++            pSubTrackDetails.fsrc.dv = novaDetails.Fsrc.DV;
++            pSubTrackDetails.cParas = novaDetails.CParas;
++            return rc;
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsQuerySubtrackDetails")]
++        private static extern int FsQuerySubtrackDetailsImpl(
++            IntPtr pfsContext,
++            IntPtr pSubTrack,
++            out FSSUBTRACKDETAILS pSubTrackDetails);
++
++        internal static unsafe int FsQuerySubtrackParaList(
+             IntPtr pfsContext,                  // IN:  ptr to FS context
+             IntPtr pSubTrack,                   // IN:  ptr to subtrack
+             int cParas,                         // IN:  size of array of para descriptions
+             FSPARADESCRIPTION* rgParaDesc,      // OUT: array of para descriptions
+-            out int cParaDesc);                 // OUT: actual number of paragraphs
++            out int cParaDesc)                  // OUT: actual number of paragraphs
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsQuerySubtrackParaListImpl(pfsContext, pSubTrack, cParas, rgParaDesc, out cParaDesc);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern int FsQueryTextDetails(
++            return NovaPts.PtsExports.FsQuerySubtrackParaList(pfsContext, pSubTrack, cParas, (NovaPts.FsParaDescription*)rgParaDesc, out cParaDesc);
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsQuerySubtrackParaList")]
++        private static extern unsafe int FsQuerySubtrackParaListImpl(
++            IntPtr pfsContext,
++            IntPtr pSubTrack,
++            int cParas,
++            FSPARADESCRIPTION* rgParaDesc,
++            out int cParaDesc);
++
++        internal static int FsQueryTextDetails(
+             IntPtr pfsContext,                  // IN:  ptr to FS context
+             IntPtr pPara,                       // IN:  ptr to text para
+-            out FSTEXTDETAILS pTextDetails);    // OUT: text details
++            out FSTEXTDETAILS pTextDetails)     // OUT: text details
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsQueryTextDetailsImpl(pfsContext, pPara, out pTextDetails);
++            }
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern unsafe int FsQueryLineListSingle(
++            NovaPts.FsTextDetails novaDetails;
++            int rc = NovaPts.PtsExports.FsQueryTextDetails(pfsContext, pPara, out novaDetails);
++            pTextDetails = default;
++            pTextDetails.fsktd = (FSKTEXTDETAILS)novaDetails.Fsktd;
++            pTextDetails.u.full.fswdir = novaDetails.Full.Fswdir;
++            pTextDetails.u.full.fsklines = (FSKTEXTLINES)novaDetails.Full.Fsklines;
++            pTextDetails.u.full.fLinesComposite = novaDetails.Full.FLinesComposite;
++            pTextDetails.u.full.cLines = novaDetails.Full.CLines;
++            pTextDetails.u.full.cAttachedObjects = novaDetails.Full.CAttachedObjects;
++            pTextDetails.u.full.dcpFirst = novaDetails.Full.DcpFirst;
++            pTextDetails.u.full.dcpLim = novaDetails.Full.DcpLim;
++            pTextDetails.u.full.fDropCapPresent = novaDetails.Full.FDropCapPresent;
++            pTextDetails.u.full.fsupdinfDropCap.fskupd = (FSKUPDATE)novaDetails.Full.FsupdinfDropCap.Fskupd;
++            pTextDetails.u.full.fsupdinfDropCap.dvrShifted = novaDetails.Full.FsupdinfDropCap.DvrShifted;
++            pTextDetails.u.full.fSuppressTopLineSpacing = novaDetails.Full.FSuppressTopLineSpacing;
++            pTextDetails.u.full.fUpdateInfoForLinesPresent = novaDetails.Full.FUpdateInfoForLinesPresent;
++            pTextDetails.u.full.cLinesBeforeChange = novaDetails.Full.CLinesBeforeChange;
++            pTextDetails.u.full.dvrShiftBeforeChange = novaDetails.Full.DvrShiftBeforeChange;
++            pTextDetails.u.full.cLinesChanged = novaDetails.Full.CLinesChanged;
++            pTextDetails.u.full.dcLinesChanged = novaDetails.Full.DcLinesChanged;
++            pTextDetails.u.full.dvrShiftAfterChange = novaDetails.Full.DvrShiftAfterChange;
++            pTextDetails.u.full.ddcpAfterChange = novaDetails.Full.DdcpAfterChange;
++            return rc;
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsQueryTextDetails")]
++        private static extern int FsQueryTextDetailsImpl(
++            IntPtr pfsContext,
++            IntPtr pPara,
++            out FSTEXTDETAILS pTextDetails);
++
++        internal static unsafe int FsQueryLineListSingle(
+             IntPtr pfsContext,                  // IN:  ptr to FS context
+             IntPtr pPara,                       // IN:  ptr to text para
+             int cLines,                         // IN:  size of array of line descriptions
+             FSLINEDESCRIPTIONSINGLE* rgLineDesc,// OUT: array of line descriptions
+-            out int cLineDesc);                 // OUT: actual number of lines
++            out int cLineDesc)                  // OUT: actual number of lines
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsQueryLineListSingleImpl(pfsContext, pPara, cLines, rgLineDesc, out cLineDesc);
++            }
++
++            return NovaPts.PtsExports.FsQueryLineListSingle(pfsContext, pPara, cLines, (NovaPts.FsLineDescriptionSingle*)rgLineDesc, out cLineDesc);
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsQueryLineListSingle")]
++        private static extern unsafe int FsQueryLineListSingleImpl(
++            IntPtr pfsContext,
++            IntPtr pPara,
++            int cLines,
++            FSLINEDESCRIPTIONSINGLE* rgLineDesc,
++            out int cLineDesc);
+ 
+         [DllImport(DllImport.PresentationNative)]
+         internal static extern unsafe int FsQueryLineListComposite(
+@@ -3883,21 +4736,68 @@ internal static extern unsafe int FsQueryTableObjCellList(
+         // FsTransformPoint
+         // FsTransformVector
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern unsafe int FsTransformRectangle(
++        internal static unsafe int FsTransformRectangle(
+             uint fswdirIn,                          // IN:  
+             ref FSRECT rectPage,                    // IN:  
+             ref FSRECT rectTransform,
+             uint fswdirOut,
++            out FSRECT rectOut)
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsTransformRectangleImpl(fswdirIn, ref rectPage, ref rectTransform, fswdirOut, out rectOut);
++            }
++
++            NovaPts.FsRect novaPage = new NovaPts.FsRect(rectPage.u, rectPage.v, rectPage.du, rectPage.dv);
++            NovaPts.FsRect novaTransform = new NovaPts.FsRect(rectTransform.u, rectTransform.v, rectTransform.du, rectTransform.dv);
++            int rc = NovaPts.PtsExports.FsTransformRectangle(fswdirIn, ref novaPage, ref novaTransform, fswdirOut, out NovaPts.FsRect novaOut);
++            rectOut.u = novaOut.U;
++            rectOut.v = novaOut.V;
++            rectOut.du = novaOut.DU;
++            rectOut.dv = novaOut.DV;
++            return rc;
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsTransformRectangle")]
++        private static extern unsafe int FsTransformRectangleImpl(
++            uint fswdirIn,
++            ref FSRECT rectPage,
++            ref FSRECT rectTransform,
++            uint fswdirOut,
+             out FSRECT rectOut);
+ 
+-        [DllImport(DllImport.PresentationNative)]
+-        internal static extern unsafe int FsTransformBbox(
++        internal static unsafe int FsTransformBbox(
+             uint fswdirIn,                          // IN:  
+             ref FSRECT rectPage,                    // IN:  
+             ref FSBBOX bboxTransform,
+             uint fswdirOut,
+-            out FSBBOX bboxOut); 
++            out FSBBOX bboxOut)
++        {
++            if (OperatingSystem.IsWindows())
++            {
++                return FsTransformBboxImpl(fswdirIn, ref rectPage, ref bboxTransform, fswdirOut, out bboxOut);
++            }
++
++            NovaPts.FsRect novaPage = new NovaPts.FsRect(rectPage.u, rectPage.v, rectPage.du, rectPage.dv);
++            NovaPts.FsBbox novaBbox = new NovaPts.FsBbox(bboxTransform.fDefined,
++                new NovaPts.FsRect(bboxTransform.fsrc.u, bboxTransform.fsrc.v, bboxTransform.fsrc.du, bboxTransform.fsrc.dv));
++            int rc = NovaPts.PtsExports.FsTransformBbox(fswdirIn, ref novaPage, ref novaBbox, fswdirOut, out NovaPts.FsBbox novaOut);
++            bboxOut = default;
++            bboxOut.fDefined = novaOut.FDefined;
++            bboxOut.fsrc.u = novaOut.Fsrc.U;
++            bboxOut.fsrc.v = novaOut.Fsrc.V;
++            bboxOut.fsrc.du = novaOut.Fsrc.DU;
++            bboxOut.fsrc.dv = novaOut.Fsrc.DV;
++            return rc;
++        }
++
++        [DllImport(DllImport.PresentationNative, EntryPoint="FsTransformBbox")]
++        private static extern unsafe int FsTransformBboxImpl(
++            uint fswdirIn,
++            ref FSRECT rectPage,
++            ref FSBBOX bboxTransform,
++            uint fswdirOut,
++            out FSBBOX bboxOut);
+ 
+         // ------------------------------------------------------------------
+         // fswordframe.h
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/MS/Internal/PtsHost/PtsCache.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/MS/Internal/PtsHost/PtsCache.cs
+index 6d9fabc..c4b477f 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/MS/Internal/PtsHost/PtsCache.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/MS/Internal/PtsHost/PtsCache.cs
+@@ -1,4 +1,4 @@
+-﻿// Licensed to the .NET Foundation under one or more agreements.
++// Licensed to the .NET Foundation under one or more agreements.
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+ /* SSS_DROP_BEGIN */
+@@ -195,7 +195,19 @@ private PtsHost AcquireContextCore(PtsContext ptsContext, TextFormattingMode tex
+                 _contextPool.Add(new ContextDesc());
+                 _contextPool[index].IsOptimalParagraphEnabled = ptsContext.IsOptimalParagraphEnabled;
+                 _contextPool[index].PtsHost = new PtsHost();
+-                _contextPool[index].PtsHost.Context = CreatePTSContext(index, textFormattingMode);
++                try
++                {
++                    _contextPool[index].PtsHost.Context = CreatePTSContext(index, textFormattingMode);
++                }
++                catch
++                {
++                    // If PTS context creation fails (e.g. the native PTS library is
++                    // unavailable on Linux), do not leave a half-initialized entry in
++                    // the pool. Its Owner is still null and PtsHost.Context is zero, and
++                    // DestroyPTSContexts would dereference the null Owner on shutdown.
++                    _contextPool.RemoveAt(index);
++                    throw;
++                }
+             }
+ #pragma warning restore IDE0017
+ 
+@@ -310,6 +322,15 @@ private void DestroyPTSContexts()
+             int index = 0;
+             while (index < _contextPool.Count)
+             {
++                // Tolerate a half-initialized entry: PTS context creation failed, so
++                // Owner is null and there is no native context to destroy. Drop the
++                // entry rather than dereferencing the null Owner (or the zero handle).
++                if (_contextPool[index].Owner == null)
++                {
++                    _contextPool.RemoveAt(index);
++                    continue;
++                }
++
+                 PtsContext ptsContext = _contextPool[index].Owner.Target as PtsContext;
+                 if (ptsContext != null)
+                 {
+@@ -372,6 +393,14 @@ private void OnPtsContextReleased(bool cleanContextPool)
+                         // Find the PtsContext in the context pool and detach it from PtsHost.
+                         for (index = 0; index < _contextPool.Count; index++)
+                         {
++                            // Skip half-initialized entries (PTS context creation failed):
++                            // they have no valid context handle and cannot match the
++                            // released PtsContext. Reading PtsHost.Context on one would
++                            // FailFast on the zero handle.
++                            if (_contextPool[index].Owner == null)
++                            {
++                                continue;
++                            }
+                             if (_contextPool[index].PtsHost.Context == ptsContext.Context)
+                             {
+                                 _contextPool[index].Owner = new WeakReference(null);
+@@ -398,6 +427,13 @@ private void OnPtsContextReleased(bool cleanContextPool)
+                 {
+                     if (!_contextPool[index].InUse)
+                     {
++                        // Tolerate a half-initialized entry (see DestroyPTSContexts): drop
++                        // it instead of reading the zero PtsHost.Context handle.
++                        if (_contextPool[index].Owner == null)
++                        {
++                            _contextPool.RemoveAt(index);
++                            continue;
++                        }
+                         Invariant.Assert(_contextPool[index].PtsHost.Context != IntPtr.Zero, "PTS Context handle is not valid.");
+                         PTS.Validate(PTS.DestroyDocContext(_contextPool[index].PtsHost.Context));
+                         Invariant.Assert(_contextPool[index].InstalledObjects != IntPtr.Zero, "Installed Objects handle is not valid.");
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/PresentationFramework.csproj b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/PresentationFramework.csproj
+index a11a5ca..1b44cfd 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/PresentationFramework.csproj
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/PresentationFramework.csproj
+@@ -1383,6 +1383,7 @@
+   <ItemGroup>
+     <ProjectReference Include="$(WpfSourceDir)PresentationCore\PresentationCore.csproj" />
+     <ProjectReference Include="..\..\..\..\..\..\src\Nova.SdlSource\Nova.SdlSource.csproj" />
++    <ProjectReference Include="..\..\..\..\..\..\src\Nova.Pts\Nova.Pts.csproj" />
+     <ProjectReference Include="$(WpfSourceDir)System.Xaml\System.Xaml.csproj" />
+     <ProjectReference Include="$(WpfSourceDir)WindowsBase\WindowsBase.csproj" />
+     <ProjectReference Include="$(WpfSourceDir)UIAutomation\UIAutomationTypes\UIAutomationTypes.csproj" />

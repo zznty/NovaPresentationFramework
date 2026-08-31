@@ -1,0 +1,22 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/Shared/MS/Internal/MimeTypeMapper.cs b/src/Microsoft.DotNet.Wpf/src/Shared/MS/Internal/MimeTypeMapper.cs
+index d7208b1..7627d44 100644
+--- a/src/Microsoft.DotNet.Wpf/src/Shared/MS/Internal/MimeTypeMapper.cs
++++ b/src/Microsoft.DotNet.Wpf/src/Shared/MS/Internal/MimeTypeMapper.cs
+@@ -44,6 +44,17 @@ internal static ContentType GetMimeTypeFromUri(Uri uriSource)
+                         _fileExtensionToMimeType.Add(JpgExtension, JpgMime);
+                         _fileExtensionToMimeType.Add(XbapExtension, XbapMime);
+ 
++                        // Linux host trap (patches/0024): urlmon's FindMimeFromData is a COM
++                        // call unavailable on Linux. Common image extensions must map here
++                        // so ResourcePart.GetContentTypeCore never reaches the urlmon path.
++                        _fileExtensionToMimeType.Add("png", new ContentType("image/png"));
++                        _fileExtensionToMimeType.Add("gif", new ContentType("image/gif"));
++                        _fileExtensionToMimeType.Add("jpeg", new ContentType("image/jpeg"));
++                        _fileExtensionToMimeType.Add("bmp", new ContentType("image/bmp"));
++                        _fileExtensionToMimeType.Add("tif", new ContentType("image/tiff"));
++                        _fileExtensionToMimeType.Add("tiff", new ContentType("image/tiff"));
++                        _fileExtensionToMimeType.Add("ico", new ContentType("image/x-icon"));
++
+                     }
+ 
+ 
