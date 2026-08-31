@@ -953,10 +953,10 @@ public sealed class MilCommandParserTests
     }
 
     [Fact]
-    public void ParseRenderData_PushOpacityMask_DeliversMaskDependent()
+    public void ParseRenderData_PushOpacityMask_CollapsesBalancedPair_DeliversMaskedRange()
     {
         var bytes = new Writer();
-        bytes.Int32(32); // 8 header + 24 payload: MilRectF + hOpacityMask + pad
+        bytes.Int32(32); // PushOpacityMask: 8 header + 24 payload (MilRectF + hOpacityMask + pad)
         bytes.UInt32((uint)MilCommandKind.PushOpacityMask);
         bytes.Float(0);
         bytes.Float(0);
@@ -965,10 +965,23 @@ public sealed class MilCommandParserTests
         bytes.UInt32(5);
         bytes.Int32(0);
 
+        bytes.Int32(16); // interior op, discarded: PushOpacity(double)
+        bytes.UInt32((uint)MilCommandKind.PushOpacity);
+        bytes.Double(0.5);
+
+        bytes.Int32(8); // Pop: consumed by the collapse
+        bytes.UInt32((uint)MilCommandKind.Pop);
+
         var visitor = new RecordingVisitor();
         MilCommandParser.ParseRenderData(bytes.ToArray(), [new ResourceHandle(501), new ResourceHandle(502), new ResourceHandle(503), new ResourceHandle(504), new ResourceHandle(505)], visitor);
 
-        Assert.Equal(new ResourceHandle(505), Assert.Single(visitor.PushOpacityMasks));
+        (ResourceHandle mask, ReadOnlyMemory<byte> range, ReadOnlyMemory<ResourceHandle> dependents) = Assert.Single(visitor.MaskedRanges);
+        Assert.Equal(new ResourceHandle(505), mask);
+        Assert.Equal(bytes.ToArray().AsMemory(32, 16), range);
+        Assert.Equal(5, dependents.Length);
+        Assert.Empty(visitor.PushOpacityMasks);
+        Assert.Empty(visitor.PushOpacities); // interior was discarded, not visited
+        Assert.Equal(0, visitor.Pops);       // pop was consumed by the collapse
     }
 
     [Fact]
@@ -1080,6 +1093,8 @@ public sealed class MilCommandParserTests
         public List<ResourceHandle> PushClips { get; } = [];
 
         public List<ResourceHandle> PushOpacityMasks { get; } = [];
+
+        public List<(ResourceHandle Mask, ReadOnlyMemory<byte> Range, ReadOnlyMemory<ResourceHandle> Dependents)> MaskedRanges { get; } = [];
 
         public List<double> PushOpacities { get; } = [];
 
@@ -1307,6 +1322,11 @@ public sealed class MilCommandParserTests
         public override void VisitPushOpacityMask(ResourceHandle opacityMask)
         {
             PushOpacityMasks.Add(opacityMask);
+        }
+
+        public override void VisitMaskedRange(ResourceHandle mask, ReadOnlyMemory<byte> renderData, ReadOnlyMemory<ResourceHandle> dependents)
+        {
+            MaskedRanges.Add((mask, renderData, dependents));
         }
 
         public override void VisitPushOpacity(double opacity)
