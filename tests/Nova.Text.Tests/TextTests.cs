@@ -1,6 +1,7 @@
 using Nova.FontConfig;
 using Nova.Geometry;
 using Nova.HarfBuzz;
+using Nova.TestSupport;
 using Nova.Vulkan;
 
 namespace Nova.Text.Tests;
@@ -63,10 +64,7 @@ public sealed class TextTests
     [Fact]
     public void Atlas_GetOrAddTwice_ReturnsSameQuadAndRenders()
     {
-        using var device = new VulkanDevice(new VulkanDeviceOptions
-        {
-            Validation = ValidationMode.Enabled
-        });
+        using var device = new VulkanDevice(NovaTestVulkan.DeviceOptions());
         using IVulkanPresenter presenter = device.CreateOffscreenPresenter(new PixelSize(64, 64));
         using GlyphAtlas atlas = new(presenter, new PixelSize(64, 64));
         using TextShaper shaper = new();
@@ -118,10 +116,7 @@ public sealed class TextTests
     [Fact]
     public void Atlas_EmptyGlyph_ReturnsOneByOneTransparentQuad()
     {
-        using var device = new VulkanDevice(new VulkanDeviceOptions
-        {
-            Validation = ValidationMode.Enabled
-        });
+        using var device = new VulkanDevice(NovaTestVulkan.DeviceOptions());
         using IVulkanPresenter presenter = device.CreateOffscreenPresenter(new PixelSize(64, 64));
         using GlyphAtlas atlas = new(presenter, new PixelSize(64, 64));
         using TextShaper shaper = new();
@@ -141,10 +136,7 @@ public sealed class TextTests
     [Fact]
     public void Atlas_TryGet_DoesNotRasterize()
     {
-        using var device = new VulkanDevice(new VulkanDeviceOptions
-        {
-            Validation = ValidationMode.Enabled
-        });
+        using var device = new VulkanDevice(NovaTestVulkan.DeviceOptions());
         using IVulkanPresenter presenter = device.CreateOffscreenPresenter(new PixelSize(64, 64));
         using GlyphAtlas atlas = new(presenter, new PixelSize(64, 64));
         using TextShaper shaper = new();
@@ -161,10 +153,7 @@ public sealed class TextTests
     [Fact]
     public void Atlas_ManyDistinctGlyphs_GrowsPages_DisposeTwice()
     {
-        using var device = new VulkanDevice(new VulkanDeviceOptions
-        {
-            Validation = ValidationMode.Enabled
-        });
+        using var device = new VulkanDevice(NovaTestVulkan.DeviceOptions());
         using IVulkanPresenter presenter = device.CreateOffscreenPresenter(new PixelSize(64, 64));
         GlyphAtlas atlas = new(presenter, new PixelSize(32, 32));
         using TextShaper shaper = new();
