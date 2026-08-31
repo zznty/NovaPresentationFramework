@@ -79,10 +79,10 @@ index 708fb8e..96cf03c 100644
          }
  
          private static DragDropEffects DoDragDropCore(DependencyObject dragSource, object data, DragDropEffects allowedEffects)
-diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/Internal/DragDropInterop.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/Internal/DragDropInterop.cs
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/DragDropInterop.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/DragDropInterop.cs
 index 2a422f4..c9b1aa7 100644
---- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/Internal/DragDropInterop.cs
-+++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/Internal/DragDropInterop.cs
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/DragDropInterop.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/DragDropInterop.cs
 @@ -42,9 +42,38 @@
              Raise(target, DragDrop.DropEvent, data, position, effects);
          }

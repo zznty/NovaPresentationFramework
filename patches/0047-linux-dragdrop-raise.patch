@@ -1,8 +1,8 @@
-diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/Internal/DragDropInterop.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/Internal/DragDropInterop.cs
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/DragDropInterop.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/DragDropInterop.cs
 new file mode 100644
 index 0000000..2a422f4
 --- /dev/null
-+++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/Internal/DragDropInterop.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/MS/internal/DragDropInterop.cs
 @@ -0,0 +1,136 @@
 +// Licensed to the .NET Foundation under one or more agreements.
 +// The .NET Foundation licenses this file to you under the MIT license.
