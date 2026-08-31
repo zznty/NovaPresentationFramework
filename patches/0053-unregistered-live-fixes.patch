@@ -1,0 +1,81 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/StreamGeometry.cs b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/StreamGeometry.cs
+index a18b3d2..8851416 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/StreamGeometry.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationCore/System/Windows/Media/StreamGeometry.cs
+@@ -1,4 +1,4 @@
+-﻿// Licensed to the .NET Foundation under one or more agreements.
++// Licensed to the .NET Foundation under one or more agreements.
+ // The .NET Foundation licenses this file to you under the MIT license.
+ 
+ //
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/MS/Internal/PtsHost/TextParaClient.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/MS/Internal/PtsHost/TextParaClient.cs
+index 6c92df1..4d054ca 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/MS/Internal/PtsHost/TextParaClient.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/MS/Internal/PtsHost/TextParaClient.cs
+@@ -297,6 +297,20 @@ internal override List<Rect> GetRectangles(ContentElement e, int start, int leng
+                         rectangles = GetRectanglesInCompositeLines(e, start, length, ref textDetails.u.full);
+                     }
+ 
++                    // The rects are paragraph-relative; translate by the arranged
++                    // paragraph rect so they are page coordinates (matching the
++                    // GetRectangleFromTextPosition path).
++                    if (rectangles.Count > 0)
++                    {
++                        for (int index = 0; index < rectangles.Count; index++)
++                        {
++                            Rect rect = rectangles[index];
++                            rect.X += TextDpi.FromTextDpi(_rect.u);
++                            rect.Y += TextDpi.FromTextDpi(_rect.v);
++                            rectangles[index] = rect;
++                        }
++                    }
++
+                     // Ensure these are specified in page coordinates.
+                     if(rectangles.Count > 0 && ThisFlowDirection != PageFlowDirection)
+                     {
+@@ -713,6 +727,12 @@ internal Rect GetRectangleFromTextPosition(ITextPointer position)
+                 Debug.Fail("Should not get here. ParaCache is not currently used.");
+             }
+ 
++            // The line rects are paragraph-relative; the caret/selection consumers
++            // of this entry point take the value directly, so translate by the
++            // arranged paragraph rect (page coordinates).
++            rect.X += TextDpi.FromTextDpi(_rect.u);
++            rect.Y += TextDpi.FromTextDpi(_rect.v);
++
+             // Mirror back to page flow direction
+             if(ThisFlowDirection != PageFlowDirection)
+             {
+@@ -1529,8 +1549,12 @@ private ReadOnlyCollection<LineResult> LineResultsFromSimpleLines(ref PTS.FSTEXT
+             {
+                 PTS.FSLINEDESCRIPTIONSINGLE lineDesc = arrayLineDesc[index];
+ 
++                // The line layout boxes drive the point hit-testing (TextParagraphView
++                // compares content-space points against them), so they must be
++                // page-relative like the caret rectangles: paragraph-relative
++                // line offsets plus the arranged paragraph rect.
+                 Rect lbox = new Rect(
+-                    TextDpi.FromTextDpi(lineDesc.urBBox), TextDpi.FromTextDpi(lineDesc.vrStart),
++                    TextDpi.FromTextDpi(_rect.u + lineDesc.urBBox), TextDpi.FromTextDpi(_rect.v + lineDesc.vrStart),
+                     TextDpi.FromTextDpi(lineDesc.durBBox), TextDpi.FromTextDpi(lineDesc.dvrAscent + lineDesc.dvrDescent));
+ 
+                 // Mirror layout box to page flow direction
+@@ -1591,7 +1615,7 @@ private ReadOnlyCollection<LineResult> LineResultsFromCompositeLines(ref PTS.FST
+                     PTS.FSLINEELEMENT element = arrayLineElement[elIndex];
+ 
+                     // Create line info
+-                    Rect lbox = new Rect(TextDpi.FromTextDpi(element.urBBox), TextDpi.FromTextDpi(lineDesc.vrStart),
++                    Rect lbox = new Rect(TextDpi.FromTextDpi(_rect.u + element.urBBox), TextDpi.FromTextDpi(_rect.v + lineDesc.vrStart),
+                                          TextDpi.FromTextDpi(element.durBBox), TextDpi.FromTextDpi(element.dvrAscent + element.dvrDescent));
+ 
+                     // Mirror layout box to page flow direction
+diff --git a/src/Microsoft.DotNet.Wpf/src/System.Windows.Controls.Ribbon/System.Windows.Controls.Ribbon.csproj b/src/Microsoft.DotNet.Wpf/src/System.Windows.Controls.Ribbon/System.Windows.Controls.Ribbon.csproj
+index bb0b3a0..ada0be1 100644
+--- a/src/Microsoft.DotNet.Wpf/src/System.Windows.Controls.Ribbon/System.Windows.Controls.Ribbon.csproj
++++ b/src/Microsoft.DotNet.Wpf/src/System.Windows.Controls.Ribbon/System.Windows.Controls.Ribbon.csproj
+@@ -1,4 +1,4 @@
+-﻿<Project Sdk="Microsoft.Net.Sdk">
++﻿<Project Sdk="Microsoft.NET.Sdk">
+ 
+   <PropertyGroup>
+     <Platforms>x86;x64;arm64</Platforms>

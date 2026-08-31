@@ -322,6 +322,18 @@ workstream, 2026-08-20).
   projects (PresentationCore / PresentationFramework / WindowsBase).
 - **Do not vendor WpfGfx.** No native code, no wpfgfx build, no DXVK/Skia.
 - The submodule is never added as a solution folder of native projects.
+- `0053-unregistered-live-fixes.patch` — three live-tree edits that had
+  escaped the series (caught by the 2026-08-31 CI bring-up; cold trees broke
+  while the workstation's dirty tree masked them):
+  1. `System.Windows.Controls.Ribbon.csproj`: `Microsoft.Net.Sdk` →
+     `Microsoft.NET.Sdk` — upstream's name is wrong on case-sensitive
+     filesystems (Windows builds it only because NTFS ignores case); a fresh
+     Linux tree fails with MSB4236.
+  2. `TextParaClient.cs`: paragraph-relative PTS rects translated to page
+     coordinates in `GetRectangles`/`GetRectangleFromTextPosition` (the
+     caret/selection half of the 0051 paragraph-visual work).
+  3. `StreamGeometry.cs`: license-header BOM stripped (no functional change).
+
 - `0052-wpf-nuget-config-feeds.patch` — submodule `NuGet.config` gains the
   Nova host feeds (nuget.org / zznty / SilkGitlab) with packageSourceMapping
   entries (Silk.NET.* → SilkGitlab, SixLabors.ImageSharp → zznty, `*` →

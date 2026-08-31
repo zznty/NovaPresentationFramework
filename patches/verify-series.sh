@@ -72,6 +72,7 @@ SERIES=(
     0050-linux-managed-dragloop
     0051-pts-paravisual-offset
     0052-wpf-nuget-config-feeds
+    0053-unregistered-live-fixes
 
 
 
