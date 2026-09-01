@@ -46,6 +46,8 @@ jobs:
       # id-token is required by both NuGet/login (OIDC exchange) and
       # attest-build-provenance (SLSA provenance signing).
       id-token: write
+      # The attestation API needs its own write permission.
+      attestations: write
 
     steps:
       - name: Checkout
