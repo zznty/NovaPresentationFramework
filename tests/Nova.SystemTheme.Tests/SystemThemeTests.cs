@@ -41,19 +41,20 @@ public sealed class SystemThemeTests
     {
         Assert.Equal(500, HostTheme.DoubleClickTime);
         Assert.False(HostTheme.IsHighContrast);
-        Assert.False(HostTheme.IsThemeActive);
+        Assert.True(HostTheme.IsThemeActive); // default uxtheme selection is Aero2
         Assert.True(HostTheme.IsProcessDpiAware);
         Assert.Equal(96, HostTheme.PixelsPerInch);
     }
 
     [Fact]
-    public void ThemeSelection_DefaultIsClassic()
+    public void ThemeSelection_DefaultIsAero2()
     {
-        // No NOVA_THEME and no programmatic override: the historic Classic behavior.
+        // No NOVA_THEME and no programmatic override: Aero2, the uxtheme theme
+        // WPF reports on Windows 10/11. Classic remains an explicit opt-in.
         HostTheme.SetTheme(null);
-        Assert.Equal("classic", HostTheme.ThemeName);
-        Assert.False(HostTheme.IsThemeActive);
-        Assert.Equal("classic.msstyles", HostTheme.UxThemeFileName);
+        Assert.Equal("aero2", HostTheme.ThemeName);
+        Assert.True(HostTheme.IsThemeActive);
+        Assert.Equal("aero2.msstyles", HostTheme.UxThemeFileName);
         Assert.Equal("NormalColor", HostTheme.UxThemeColor);
         Assert.Equal(string.Empty, HostTheme.UxThemeSize);
     }
@@ -91,13 +92,13 @@ public sealed class SystemThemeTests
     }
 
     [Fact]
-    public void ThemeSelection_UnknownValueFallsBackToClassic()
+    public void ThemeSelection_UnknownValueFallsBackToAero2()
     {
         HostTheme.SetTheme("bogus");
         try
         {
-            Assert.Equal("classic", HostTheme.ThemeName);
-            Assert.False(HostTheme.IsThemeActive);
+            Assert.Equal("aero2", HostTheme.ThemeName);
+            Assert.True(HostTheme.IsThemeActive);
         }
         finally
         {
