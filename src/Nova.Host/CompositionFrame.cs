@@ -177,9 +177,10 @@ public sealed class CompositionFrame : IDisposable
     /// </summary>
     public bool TryPump(out SdlEvent ev)
     {
-        ObjectDisposedException.ThrowIf(_disposed != 0, this);
         ev = default;
-        if (Closing || Host is null)
+        // A closed/disposed frame is a normal end state for a pump (the window's close path
+        // disposes it mid-loop), not misuse: report "nothing to pump".
+        if (_disposed != 0 || Closing || Host is null)
         {
             return false;
         }
@@ -196,14 +197,13 @@ public sealed class CompositionFrame : IDisposable
     /// <summary>
     /// Same as <see cref="TryPump"/> but blocks up to <paramref name="timeoutMs"/>
     /// milliseconds for the next event. Returns <c>false</c> when the wait timed
-    /// out, when the frame is offscreen/closing, or when a quit / own-window
+    /// out, when the frame is offscreen/closing/disposed, or when a quit / own-window
     /// close-requested event was consumed (which sets <see cref="Closing"/>).
     /// </summary>
     public bool WaitEventTimeout(int timeoutMs, out SdlEvent ev)
     {
-        ObjectDisposedException.ThrowIf(_disposed != 0, this);
         ev = default;
-        if (Closing || Host is null)
+        if (_disposed != 0 || Closing || Host is null)
         {
             return false;
         }
@@ -228,9 +228,12 @@ public sealed class CompositionFrame : IDisposable
 
         if (ev.Kind == SdlEventKind.WindowCloseRequested && IsOwnWindow(ev.Window))
         {
+            // Deliver the window-manager close button to the source: it routes WM_CLOSE into the
+            // WPF window (Closing -> Close -> source dispose). Consuming it here (returning false)
+            // left the button dead and the pump idling on a frame that never closed.
             Closing = true;
-            result = default;
-            return false;
+            result = ev;
+            return true;
         }
 
         if (ev.Kind == SdlEventKind.WindowResized && IsOwnWindow(ev.Window) && Window is not null)

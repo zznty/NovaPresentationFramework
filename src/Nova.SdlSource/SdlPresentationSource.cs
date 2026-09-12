@@ -487,6 +487,13 @@ public sealed class SdlPresentationSource : PresentationSource, IDisposable, IMo
             while (true)
             {
                 source.Dispatch(ev);
+
+                // A window close request disposes the frame inside Dispatch.
+                if (source.IsClosing)
+                {
+                    break;
+                }
+
                 if (source.CompositionTarget.RootVisual is System.Windows.UIElement root)
                 {
                     root.UpdateLayout();

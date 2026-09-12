@@ -12,7 +12,7 @@ namespace Nova.Framework.Tests;
 /// <c>ShowDialog()</c> runs <c>CloseWindowFromWmClose</c> → <c>DoDialogHide()</c>, whose Win32
 /// thread-window bookkeeping (<c>Debug.Assert</c> + <c>EnableThreadWindows(true)</c>) dereferenced
 /// the list that Linux never creates (ShowDialog's enumeration is Windows-only). The assert threw
-/// (a NullReferenceException in Release builds — what the shipped launcher hit) and aborted
+/// (a NullReferenceException in Release builds) and aborted
 /// <c>CloseWindowFromWmClose</c> BEFORE its Linux branch disposed the SDL presentation source, so
 /// the window stayed mapped and unpumped: the compositor showed it as "not responding" and the
 /// DuceRuntime binding/channel mappings were never drained.
