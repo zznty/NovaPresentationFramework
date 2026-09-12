@@ -322,6 +322,21 @@ workstream, 2026-08-20).
   projects (PresentationCore / PresentationFramework / WindowsBase).
 - **Do not vendor WpfGfx.** No native code, no wpfgfx build, no DXVK/Skia.
 - The submodule is never added as a solution folder of native projects.
+- `0054-window-dialoghide-linux-guard.patch` — modal `Close()` no longer aborts on
+  Linux (2026-09-13). `DoDialogHide` asserted `_threadWindowHandles != null` and then called
+  `EnableThreadWindows(true)`, but Linux never creates that list: the enumeration sits inside
+  ShowDialog's Windows-only block (0018), so closing a `ShowDialog()` window threw —
+  DebugAssertException under a debug host, NullReferenceException in Release builds. The throw
+  aborted `CloseWindowFromWmClose` BEFORE its Linux branch disposed the SDL presentation source,
+  leaving the window mapped and unpumped (the compositor reports it as "not responding") and the
+  DuceRuntime binding/channel mappings undrained. Upstream's own comment on that assert named
+  "if condition" as the fallback, which is exactly what the re-enable now does. Patched file:
+  `PresentationFramework/System/Windows/Window.cs`, generated against the intermediate state after
+  0053-unregistered-live-fixes. Regression test: `tests/Nova.Framework.Tests/WindowModalCloseTests.cs`
+  (RED before: DebugAssertException plus non-zero binding counts; GREEN after: close completes and
+  drains both counts to 0). Note: `Window.Closed` is still never raised on Linux for a shown window
+  (`WmDestroy` is Windows-only) — separate gap, not covered here.
+
 - `0053-unregistered-live-fixes.patch` — three live-tree edits that had
   escaped the series (caught by the 2026-08-31 CI bring-up; cold trees broke
   while the workstation's dirty tree masked them):

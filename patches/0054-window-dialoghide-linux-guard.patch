@@ -1,0 +1,29 @@
+diff --git a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Window.cs b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Window.cs
+index 16c2630..df406a7 100644
+--- a/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Window.cs
++++ b/src/Microsoft.DotNet.Wpf/src/PresentationFramework/System/Windows/Window.cs
+@@ -4583,17 +4583,13 @@
+             // enable previous window stuff goes here...
+             wasActive = _swh.IsActiveWindow;
+ 
+-            // We assert here b/c I think _threadWindowHandles should never be null when we get
+-            // called in here.
+-            //
+-            // However, if inside ShowDialog we hit an exception after showing the dialog and the
+-            // exception handler is run, then _threadWindowHandles will be null here.
+-            //
+-            // Keeping this as assert.  If this turn out to be an over active assert, we'll switch to
+-            // an if condition.
+-            Debug.Assert(_threadWindowHandles != null, "_threadWindowHandles must not be null at this point");
+-            // reenable windows in the thread that were disabled
+-            EnableThreadWindows(true);
++            // On Linux the list is never created: ShowDialog's Win32 thread-window enumeration is
++            // Windows-only here, so nothing was disabled and there is nothing to re-enable.
++            if (_threadWindowHandles != null)
++            {
++                // reenable windows in the thread that were disabled
++                EnableThreadWindows(true);
++            }
+ 
+             // if dialog that is closing was active window and there was a previously active window,
+             // set the active window.  The owner window may not be the previously active window. See DevDiv bug 122467 for details.

@@ -73,6 +73,7 @@ SERIES=(
     0051-pts-paravisual-offset
     0052-wpf-nuget-config-feeds
     0053-unregistered-live-fixes
+    0054-window-dialoghide-linux-guard
 
 
 
